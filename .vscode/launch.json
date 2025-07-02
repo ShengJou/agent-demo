@@ -1,0 +1,21 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug Call Tool",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/example/call-tool/node_modules/tsx/dist/cli.mjs",
+      "args": ["${workspaceFolder}/example/call-tool/src/cli.ts"],
+      "cwd": "${workspaceFolder}/example/call-tool",
+      "env": {
+        "TMDB_API_KEY": "63149558d3413b3b6101514557889383",
+        "DEEPSEEK_API_KEY": "sk-052b1bf3951d41819e4922b2d391ecb0"
+      },
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "skipFiles": ["<node_internals>/**"],
+      "outputCapture": "std"
+    }
+  ]
+}

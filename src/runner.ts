@@ -3,18 +3,29 @@
  *
  * This module converts a Genkit GenerateRequest into a DeepSeek API request,
  * then processes the response into a Genkit GenerateResponseData object.
- * 
+ *
  * DeepSeek API documentation:
  *   https://api-docs.deepseek.com/api/create-chat-completion
  */
 
-import { GenerateRequest, GenerateResponseData, Message, Part, StreamingCallback } from 'genkit';
-import { GenerateResponseChunkData } from 'genkit/model';
-import OpenAI from 'openai';
-import { ChatCompletionCreateParamsNonStreaming, ChatCompletionMessageParam } from 'openai/resources/chat/completions';
-import { z } from 'zod';
-import { DeepSeekConfigSchema, SUPPORTED_DEEPSEEK_MODELS } from './models';
-import { removeEmptyKeys } from './utils';
+import {
+  GenerateRequest,
+  GenerateResponseData,
+  Message,
+  Part,
+  StreamingCallback,
+} from "genkit";
+import { GenerateResponseChunkData } from "genkit/model";
+import OpenAI from "openai";
+import {
+  ChatCompletionChunk,
+  ChatCompletionCreateParamsNonStreaming,
+  ChatCompletionMessageParam,
+  ChatCompletionTool,
+} from "openai/resources/chat/completions";
+import { z } from "zod";
+import { DeepSeekConfigSchema, SUPPORTED_DEEPSEEK_MODELS } from "./models";
+import { removeEmptyKeys } from "./utils";
 
 /**
  * DeepSeekCandidateSchema defines the structure of a candidate as returned by DeepSeek.
@@ -23,15 +34,19 @@ import { removeEmptyKeys } from './utils';
  * - finishReason: The finish reason (defaults to "other" if missing).
  * - message: An object containing:
  *     - role: Always "assistant" for DeepSeek responses.
- *     - text: The text content.
+ *     - content: Array of content parts (text, toolRequest, etc.)
  * - custom: Any additional raw response data.
  */
 export const DeepSeekCandidateSchema = z.object({
   index: z.number(),
   finishReason: z.string(),
   message: z.object({
-    role: z.literal('assistant'),
-    text: z.string(),
+    role: z.literal("model"),
+    content: z.array(
+      z.object({
+        text: z.string(),
+      })
+    ),
   }),
   custom: z.any(),
 });
@@ -45,13 +60,19 @@ export type DeepSeekCandidate = z.infer<typeof DeepSeekCandidateSchema>;
  * @param choice - The DeepSeek API chunk choice.
  * @returns A DeepSeekCandidate object.
  */
-export function fromDeepSeekChunkChoice(choice: any): DeepSeekCandidate {
-  return DeepSeekCandidateSchema.parse({
-    index: choice.index,
-    finishReason: choice.finish_reason || 'other',
-    message: { role: 'assistant', text: choice.delta.content },
-    custom: {},
-  });
+export function fromDeepSeekChunkChoice(
+  choice: ChatCompletionChunk.Choice
+): ChatCompletionChunk.Choice {
+  return choice;
+  // return DeepSeekCandidateSchema.parse({
+  //   index: choice.index,
+  //   finishReason: choice.finish_reason || "other",
+  //   message: {
+  //     role: "model",
+  //     content: [{ text: choice.delta.content || "" }],
+  //   },
+  //   custom: {},
+  // });
 }
 
 /**
@@ -62,10 +83,18 @@ export function fromDeepSeekChunkChoice(choice: any): DeepSeekCandidate {
  * @returns A DeepSeekCandidate object.
  */
 export function fromDeepSeekChoice(choice: any): DeepSeekCandidate {
+  let finishReason = choice.finish_reason || "other";
+  if (finishReason === "tool_calls") {
+    finishReason = "stop";
+  }
   return DeepSeekCandidateSchema.parse({
     index: choice.index,
-    finishReason: choice.finish_reason || 'other',
-    message: { role: 'assistant', text: choice.message.content },
+    // "length" | "unknown" | "stop" | "blocked" | "interrupted" | "other";
+    finishReason,
+    message: {
+      role: "model",
+      content: [{ text: choice.message.content || "" }],
+    },
     custom: {},
   });
 }
@@ -94,18 +123,21 @@ function toDeepSeekMessages(messages: any[]): ChatCompletionMessageParam[] {
   return messages.map((msg) => {
     const m = new Message(msg);
     // Assert explicit literal type for roles
-    const role = toDeepSeekRole(msg.role) as "system" | "assistant" | "user" | "function";
+    const role: ReturnType<typeof toDeepSeekRole> = toDeepSeekRole(msg.role);
 
     if (role === "function") {
       // For function messages, include a required name property.
-      return { role, content: m.text, name: msg.name || "function" } as ChatCompletionMessageParam;
+      return {
+        role,
+        content: m.text,
+        name: msg.name || "function",
+      } as ChatCompletionMessageParam;
     }
 
     // For other messages, ensure no name property is present.
     return { role, content: m.text } as ChatCompletionMessageParam;
   });
 }
-
 
 /**
  * Converts a standard role string into its DeepSeek-specific role equivalent.
@@ -120,12 +152,11 @@ function toDeepSeekMessages(messages: any[]): ChatCompletionMessageParam[] {
 function toDeepSeekRole(role: string): string {
   // Example: mapping roles. Adjust as necessary.
   if (role === "system") return "system";
-  if (role === "assistant") return "assistant";
+  if (role === "model") return "assistant";
   if (role === "user") return "user";
-  if (role === "function") return "function";
+  if (role === "tool") return "function";
   return role;
 }
-
 
 /**
  * Converts a given tool object to a DeepSeek tool format.
@@ -133,24 +164,29 @@ function toDeepSeekRole(role: string): string {
  * @param tool - The tool object to be converted. It should have at least a `name` property and optionally an `inputSchema` property.
  * @returns An object representing the tool in DeepSeek format, with a `type` of 'function' and a `function` property containing the tool's name and parameters.
  */
-function toDeepSeekTool(tool: any): any {
+function toDeepSeekTool(tool: any): ChatCompletionTool {
   return {
-    type: 'function',
+    type: "function",
     function: {
       name: tool.name,
-      parameters: tool.inputSchema !== null ? tool.inputSchema : undefined,
+      description: tool.description,
+      parameters: {
+        type: tool.inputSchema.type,
+        required: tool.inputSchema.required,
+        properties: tool.inputSchema.properties,
+        additionalProperties: tool.inputSchema.additionalProperties,
+      },
     },
   };
 }
 
-
 /**
- * Converts a GenerateRequest with DeepSeek configuration and messages into a 
+ * Converts a GenerateRequest with DeepSeek configuration and messages into a
  * ChatCompletionCreateParamsNonStreaming request body for DeepSeek.
  *
- * This function processes the provided messages using the toDeepSeekMessages function and 
- * applies the configuration settings required by DeepSeek's API. It removes any empty keys from 
- * the final request object before returning it. If the configuration is missing in the request, 
+ * This function processes the provided messages using the toDeepSeekMessages function and
+ * applies the configuration settings required by DeepSeek's API. It removes any empty keys from
+ * the final request object before returning it. If the configuration is missing in the request,
  * an error is thrown.
  *
  * @param modelName The name of the DeepSeek model to use.
@@ -170,10 +206,10 @@ export function toDeepSeekRequestBody(
 
   const config = request.config;
   if (!config) {
-    throw new Error('Missing configuration in request');
+    throw new Error("Missing configuration in request");
   }
-  
- const body = {
+
+  const body = {
     model: modelName,
     messages: toDeepSeekMessages(request.messages),
     temperature: config.temperature,
@@ -185,7 +221,10 @@ export function toDeepSeekRequestBody(
     logprobs: config.logProbs,
     top_logprobs: config.topLogProbs,
     tools: request.tools ? request.tools.map(toDeepSeekTool) : undefined,
-    tool_choice: (config as any).tool_choice || "none",
+    tool_choice:
+      request.tools && request.tools.length > 0
+        ? (config as any).tool_choice || "auto"
+        : "none",
     response_format: { type: "text" }, // DeepSeek only supports text responses
     stream: false, // Will be toggled to true if a streaming callback is provided
     stream_options: null,
@@ -204,12 +243,13 @@ export function toDeepSeekRequestBody(
  * @returns An object with type "text" and the text content.
  * @throws Error if the provided part does not contain a text property.
  */
-export function toDeepSeekTextContent(
-  part: Part
-): { type: 'text'; text: string } {
+export function toDeepSeekTextContent(part: Part): {
+  type: "text";
+  text: string;
+} {
   if (part.text) {
     return {
-      type: 'text',
+      type: "text",
       text: part.text,
     };
   }
@@ -232,7 +272,7 @@ export function toDeepSeekTextContent(
 export function deepseekRunner(name: string, client: OpenAI) {
   return async (
     request: GenerateRequest<typeof DeepSeekConfigSchema>,
-    streamingCallback?: StreamingCallback<GenerateResponseChunkData>
+    streamingCallback?: StreamingCallback<ChatCompletionChunk>
   ): Promise<GenerateResponseData> => {
     let response: any;
     // Build the DeepSeek request body.
@@ -245,13 +285,14 @@ export function deepseekRunner(name: string, client: OpenAI) {
         stream: true,
       });
       for await (const chunk of stream) {
-        chunk.choices?.forEach((chunkChoice: any) => {
-          const candidate = fromDeepSeekChunkChoice(chunkChoice);
-          streamingCallback({
-            index: candidate.index,
-            content: [{ text: candidate.message.text }],
-          });
-        });
+        streamingCallback(chunk);
+        // chunk.choices?.forEach((chunkChoice: ChatCompletionChunk.Choice) => {
+        //   const candidate = fromDeepSeekChunkChoice(chunkChoice);
+        //   streamingCallback({
+        //     index: candidate.index,
+        //     content: candidate.message.content,
+        //   });
+        // });
       }
       response = await stream.finalChatCompletion();
     } else {
@@ -261,7 +302,9 @@ export function deepseekRunner(name: string, client: OpenAI) {
 
     // Map the DeepSeek response into Genkit's expected format.
     return {
-      candidates: response.choices.map((c: any) => fromDeepSeekChoice(c)),
+      candidates: response.choices.map((c: ChatCompletionChunk.Choice) =>
+        fromDeepSeekChunkChoice(c)
+      ),
       usage: {
         inputTokens: response.usage?.prompt_tokens,
         outputTokens: response.usage?.completion_tokens,

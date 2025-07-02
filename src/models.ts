@@ -4,9 +4,9 @@
  * @see [DeepSeek Create Chat Completion API](https://api-docs.deepseek.com/api/create-chat-completion)
  * @see [DeepSeek Reasoning Model](https://api-docs.deepseek.com/guides/reasoning_model)
  */
-import { GenerationCommonConfigSchema, ModelReference } from 'genkit';
-import { modelRef } from 'genkit/model';
-import { z } from 'zod';
+import { GenerationCommonConfigSchema, ModelReference } from "genkit";
+import { modelRef } from "genkit/model";
+import { z } from "zod";
 
 export const DeepSeekConfigSchema = GenerationCommonConfigSchema.extend({
   frequencyPenalty: z.number().min(-2).max(2).optional(),
@@ -26,7 +26,7 @@ export const deepseekChat = modelRef({
       output: ["text"],
       multiturn: true,
       systemRole: true,
-      tools: false,
+      tools: false, // Deepseek chat does not support tools
     },
   },
   configSchema: DeepSeekConfigSchema,
@@ -41,17 +41,16 @@ export const deepseekReasoner = modelRef({
       output: ["text"],
       multiturn: true,
       systemRole: true,
-      tools: false,
+      tools: true, // Deepseek reasoner supports tools
     },
   },
   configSchema: DeepSeekConfigSchema,
 });
 
-
 export const SUPPORTED_DEEPSEEK_MODELS: Record<
   string,
   ModelReference<typeof DeepSeekConfigSchema>
 > = {
-  'deepseek-chat': deepseekChat,
-  'deepseek-reasoner': deepseekReasoner,
+  "deepseek-chat": deepseekChat,
+  "deepseek-reasoner": deepseekReasoner,
 };

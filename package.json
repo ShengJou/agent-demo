@@ -9,6 +9,12 @@
     "build": "tsc",
     "test": "jest"
   },
+  "files": [
+    "dist",
+    "src",
+    "LICENSE",
+    "README.md"
+  ],
   "keywords": [
     "genkit",
     "genkit-plugin",
