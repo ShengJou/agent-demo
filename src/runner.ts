@@ -1,10 +1,10 @@
 /**
- * DeepSeek Runner for Genkit
+ * Genkit 的 DeepSeek 运行器
  *
- * This module converts a Genkit GenerateRequest into a DeepSeek API request,
- * then processes the response into a Genkit GenerateResponseData object.
+ * 此模块将 Genkit GenerateRequest 转换为 DeepSeek API 请求，
+ * 然后将响应处理为 Genkit GenerateResponseData 对象。
  *
- * DeepSeek API documentation:
+ * DeepSeek API 文档：
  *   https://api-docs.deepseek.com/api/create-chat-completion
  */
 
@@ -12,204 +12,173 @@ import {
   GenerateRequest,
   GenerateResponseData,
   Message,
-  Part,
   StreamingCallback,
 } from "genkit";
 import { GenerateResponseChunkData } from "genkit/model";
 import OpenAI from "openai";
 import {
+  ChatCompletion,
   ChatCompletionChunk,
-  ChatCompletionCreateParamsNonStreaming,
-  ChatCompletionMessageParam,
-  ChatCompletionTool,
+  ChatCompletionCreateParamsBase,
 } from "openai/resources/chat/completions";
-import { z } from "zod";
 import { DeepSeekConfigSchema, SUPPORTED_DEEPSEEK_MODELS } from "./models";
-import { removeEmptyKeys } from "./utils";
+import _ from "lodash";
 
 /**
- * DeepSeekCandidateSchema defines the structure of a candidate as returned by DeepSeek.
- * It includes:
- * - index: The candidate index.
- * - finishReason: The finish reason (defaults to "other" if missing).
- * - message: An object containing:
- *     - role: Always "assistant" for DeepSeek responses.
- *     - content: Array of content parts (text, toolRequest, etc.)
- * - custom: Any additional raw response data.
+ * @description 将 DeepSeek 角色转换为 Genkit 角色。
+ * @param role - 要转换的 DeepSeek 角色。
+ * @returns Genkit 角色。
  */
-export const DeepSeekCandidateSchema = z.object({
-  index: z.number(),
-  finishReason: z.string(),
-  message: z.object({
-    role: z.literal("model"),
-    content: z.array(
-      z.object({
-        text: z.string(),
-      })
-    ),
-  }),
-  custom: z.any(),
-});
-
-export type DeepSeekCandidate = z.infer<typeof DeepSeekCandidateSchema>;
+export function fromDeepSeekRole(
+  role: string | undefined
+): GenerateRequest<typeof DeepSeekConfigSchema>["messages"][number]["role"] {
+  if (role === "assistant") return "model";
+  if (role === "system") return "system";
+  if (role === "user") return "user";
+  if (role === "tool") return "tool";
+  return "model";
+}
 
 /**
- * Converts a DeepSeek API chunk choice into a DeepSeekCandidate.
- * This function validates the output against the DeepSeekCandidateSchema.
+ * 将 DeepSeek 的 finish_reason 转换为 Genkit 的 finishReason。
+ * @param finishReason - DeepSeek 的 finish_reason。
+ * @returns Genkit 的 finishReason。
+ */
+export function fromDeepSeekFinishReason(
+  finishReason: ChatCompletion.Choice["finish_reason"]
+): GenerateResponseData["finishReason"] {
+  if (finishReason === "stop") return "stop";
+  if (finishReason === "length") return "length";
+  if (finishReason === "tool_calls") return "stop";
+  if (finishReason === "content_filter") return "stop";
+  if (finishReason === "function_call") return "stop";
+  return "other";
+}
+/**
+ * 将 DeepSeek API 响应的块数据转换为 Genkit 的 GenerateResponseChunkData。
  *
- * @param choice - The DeepSeek API chunk choice.
- * @returns A DeepSeekCandidate object.
+ * @param choice - DeepSeek API 响应的块数据。
+ * @returns Genkit 的 GenerateResponseChunkData 对象。
  */
 export function fromDeepSeekChunkChoice(
   choice: ChatCompletionChunk.Choice
-): ChatCompletionChunk.Choice {
-  return choice;
-  // return DeepSeekCandidateSchema.parse({
-  //   index: choice.index,
-  //   finishReason: choice.finish_reason || "other",
-  //   message: {
-  //     role: "model",
-  //     content: [{ text: choice.delta.content || "" }],
-  //   },
-  //   custom: {},
-  // });
-}
-
-/**
- * Converts a DeepSeek API choice (non-streaming) into a DeepSeekCandidate.
- * This function validates the output against the DeepSeekCandidateSchema.
- *
- * @param choice - The DeepSeek API choice.
- * @returns A DeepSeekCandidate object.
- */
-export function fromDeepSeekChoice(choice: any): DeepSeekCandidate {
-  let finishReason = choice.finish_reason || "other";
-  if (finishReason === "tool_calls") {
-    finishReason = "stop";
-  }
-  return DeepSeekCandidateSchema.parse({
+): GenerateResponseChunkData {
+  return {
+    role: fromDeepSeekRole(choice.delta.role),
     index: choice.index,
-    // "length" | "unknown" | "stop" | "blocked" | "interrupted" | "other";
-    finishReason,
-    message: {
-      role: "model",
-      content: [{ text: choice.message.content || "" }],
-    },
-    custom: {},
-  });
+    content: [
+      {
+        text: choice.delta.content || "",
+        media: undefined,
+        toolRequest: undefined,
+        toolResponse: undefined,
+        data: undefined,
+        metadata: undefined,
+      },
+    ],
+  };
 }
 
 /**
- * Converts Genkit messages to DeepSeek API messages.
- * Each message is reduced to its text content.
+ * 将用户输入消息和历史消息的数组转换为符合 DeepSeek 消息类型的数组。
  *
- * If a message is of type "function", a default name is assigned.
+ * 每个消息的处理过程如下：
+ * - 为每个提供的消息创建一个新的 Message 实例。
+ * - 通过 toDeepSeekRole 函数确定消息角色，确保它是 "system"、"assistant"、"user" 或 "tool" 之一。
+ * - 对于任何其他角色的消息，结果对象仅包含角色和内容。
+ *
+ * @param messages - 要转换的原始消息对象数组。
+ * @returns 格式化用于 DeepSeek 处理的 ChatCompletionMessageParam 对象数组。
  */
-/**
- * Converts an array of raw message objects into corresponding ChatCompletionMessageParam objects.
- *
- * Each message is processed as follows:
- * - A new Message instance is created for each provided message.
- * - The message role is determined via the toDeepSeekRole function, ensuring it's one
- *   of "system", "assistant", "user", or "function".
- * - For messages with the "function" role, the resulting object includes a "name" property,
- *   defaulting to "function" if no name is provided.
- * - For messages with any other role, the resulting object contains only the role and content.
- *
- * @param messages - The array of raw message objects to be converted.
- * @returns An array of ChatCompletionMessageParam objects formatted for deep seek processing.
- */
-function toDeepSeekMessages(messages: any[]): ChatCompletionMessageParam[] {
+function toDeepSeekMessages(
+  messages: GenerateRequest<typeof DeepSeekConfigSchema>["messages"]
+) {
   return messages.map((msg) => {
     const m = new Message(msg);
-    // Assert explicit literal type for roles
-    const role: ReturnType<typeof toDeepSeekRole> = toDeepSeekRole(msg.role);
-
-    if (role === "function") {
-      // For function messages, include a required name property.
-      return {
-        role,
-        content: m.text,
-        name: msg.name || "function",
-      } as ChatCompletionMessageParam;
+    switch (m.role) {
+      case "system":
+        return {
+          role: "system" as const,
+          content: m.text,
+        };
+      case "user":
+        return {
+          role: "user" as const,
+          content: m.text,
+        };
+      case "model":
+        return {
+          role: "assistant" as const,
+          content: m.text,
+        };
+      case "tool":
+        return {
+          role: "tool" as const,
+          content: m.text,
+          tool_call_id: m.toolRequests.at(0)?.toolRequest.ref || "default",
+        };
+      default:
+        throw new Error(`不支持的角色: ${m.role}`);
     }
-
-    // For other messages, ensure no name property is present.
-    return { role, content: m.text } as ChatCompletionMessageParam;
   });
 }
 
 /**
- * Converts a standard role string into its DeepSeek-specific role equivalent.
+ * 将给定的工具对象转换为 DeepSeek 工具格式。
  *
- * This function maps commonly used roles ("system", "assistant", "user", "function")
- * to their corresponding DeepSeek role representations. If the provided role does not
- * match any of the expected values, it is returned unchanged.
- *
- * @param role - The role string to convert.
- * @returns The DeepSeek-specific role string.
+ * @param tool - 要转换的工具对象。它应该至少有一个 `name` 属性，可选地有一个 `inputSchema` 属性。
+ * @returns 以 DeepSeek 格式表示工具的对象，类型为 'function'，function 属性包含工具的名称和参数。
  */
-function toDeepSeekRole(role: string): string {
-  // Example: mapping roles. Adjust as necessary.
-  if (role === "system") return "system";
-  if (role === "model") return "assistant";
-  if (role === "user") return "user";
-  if (role === "tool") return "function";
-  return role;
-}
-
-/**
- * Converts a given tool object to a DeepSeek tool format.
- *
- * @param tool - The tool object to be converted. It should have at least a `name` property and optionally an `inputSchema` property.
- * @returns An object representing the tool in DeepSeek format, with a `type` of 'function' and a `function` property containing the tool's name and parameters.
- */
-function toDeepSeekTool(tool: any): ChatCompletionTool {
+function toDeepSeekTool(
+  tool: NonNullable<
+    GenerateRequest<typeof DeepSeekConfigSchema>["tools"]
+  >[number]
+) {
   return {
-    type: "function",
+    type: "function" as const,
     function: {
       name: tool.name,
       description: tool.description,
       parameters: {
-        type: tool.inputSchema.type,
-        required: tool.inputSchema.required,
-        properties: tool.inputSchema.properties,
-        additionalProperties: tool.inputSchema.additionalProperties,
+        type: tool.inputSchema?.type || "object",
+        required: tool.inputSchema?.required || [],
+        properties: tool.inputSchema?.properties || {},
+        additionalProperties: tool.inputSchema?.additionalProperties || false,
       },
     },
   };
 }
 
 /**
- * Converts a GenerateRequest with DeepSeek configuration and messages into a
- * ChatCompletionCreateParamsNonStreaming request body for DeepSeek.
+ * 将带有 DeepSeek 配置和消息的 GenerateRequest 转换为
+ * DeepSeek 的 ChatCompletionCreateParamsNonStreaming 请求体。
  *
- * This function processes the provided messages using the toDeepSeekMessages function and
- * applies the configuration settings required by DeepSeek's API. It removes any empty keys from
- * the final request object before returning it. If the configuration is missing in the request,
- * an error is thrown.
+ * 此函数使用 toDeepSeekMessages 函数处理提供的消息，并
+ * 应用 DeepSeek API 所需的配置设置。在返回之前，它从
+ * 最终请求对象中删除任何空键。如果请求中缺少配置，
+ * 则抛出错误。
  *
- * @param modelName The name of the DeepSeek model to use.
- * @param request - The generation request containing both the messages and the DeepSeek-specific configuration.
- *                  The configuration must adhere to DeepSeekConfigSchema.
+ * @param modelName 要使用的 DeepSeek 模型名称。
+ * @param request - 包含消息和 DeepSeek 特定配置的生成请求。
+ *                  配置必须符合 DeepSeekConfigSchema。
  *
- * @returns A formatted ChatCompletionCreateParamsNonStreaming object tailored for making DeepSeek API calls.
+ * @returns 为进行 DeepSeek API 调用而定制的格式化 ChatCompletionCreateParamsNonStreaming 对象。
  *
- * @throws {Error} Throws an error if the configuration is not provided in the request.
+ * @throws {Error} 如果请求中未提供配置，则抛出错误。
  */
 export function toDeepSeekRequestBody(
   modelName: string,
   request: GenerateRequest<typeof DeepSeekConfigSchema>
-): ChatCompletionCreateParamsNonStreaming {
+): ChatCompletionCreateParamsBase {
   const model = SUPPORTED_DEEPSEEK_MODELS[modelName];
-  if (!model) throw new Error(`Unsupported model: ${modelName}`);
+  if (!model) throw new Error(`不支持的模型: ${modelName}`);
 
   const config = request.config;
   if (!config) {
-    throw new Error("Missing configuration in request");
+    throw new Error("请求中缺少配置");
   }
 
-  const body = {
+  const body: ChatCompletionCreateParamsBase = {
     model: modelName,
     messages: toDeepSeekMessages(request.messages),
     temperature: config.temperature,
@@ -220,91 +189,107 @@ export function toDeepSeekRequestBody(
     presence_penalty: config.presencePenalty,
     logprobs: config.logProbs,
     top_logprobs: config.topLogProbs,
-    tools: request.tools ? request.tools.map(toDeepSeekTool) : undefined,
+    tools: request.tools?.map(toDeepSeekTool),
     tool_choice:
       request.tools && request.tools.length > 0
         ? (config as any).tool_choice || "auto"
         : "none",
-    response_format: { type: "text" }, // DeepSeek only supports text responses
-    stream: false, // Will be toggled to true if a streaming callback is provided
+    response_format: { type: "text" }, // DeepSeek 只支持文本响应
+    stream: false, // 如果提供流式回调，将切换为 true
     stream_options: null,
-  } as ChatCompletionCreateParamsNonStreaming;
+  };
 
-  return removeEmptyKeys(body);
+  return body;
 }
 
 /**
- * Converts a Genkit Part to a DeepSeek ChatCompletionContentPart.
+ * 创建 Genkit 用于与 DeepSeek 模型交互的运行器。
  *
- * DeepSeek only supports text responses. This function extracts the text content
- * from the Genkit Part and returns an object with type "text" and the text content.
+ * 此运行器将 Genkit GenerateRequest（使用 DeepSeekConfigSchema）
+ * 转换为 DeepSeek API 请求体，然后将 API 响应处理为
+ * Genkit GenerateResponseData 对象。
  *
- * @param part - The Genkit Part to convert. Must contain a "text" property.
- * @returns An object with type "text" and the text content.
- * @throws Error if the provided part does not contain a text property.
- */
-export function toDeepSeekTextContent(part: Part): {
-  type: "text";
-  text: string;
-} {
-  if (part.text) {
-    return {
-      type: "text",
-      text: part.text,
-    };
-  }
-  throw new Error(
-    `DeepSeek only supports text parts; received: ${JSON.stringify(part)}.`
-  );
-}
-
-/**
- * Creates the runner used by Genkit to interact with the DeepSeek model.
- *
- * This runner converts a Genkit GenerateRequest (using DeepSeekConfigSchema)
- * into a DeepSeek API request body and then processes the API response into a
- * Genkit GenerateResponseData object.
- *
- * @param name - The name of the DeepSeek model (e.g. "deepseek-chat" or "deepseek-reasoner").
- * @param client - The OpenAI-compatible client instance configured for DeepSeek.
- * @returns A function that Genkit will call to generate completions.
+ * @param name - DeepSeek 模型的名称（例如 "deepseek-chat" 或 "deepseek-reasoner"）。
+ * @param client - 为 DeepSeek 配置的 OpenAI 兼容客户端实例。
+ * @returns Genkit 将调用以生成完成的函数。
  */
 export function deepseekRunner(name: string, client: OpenAI) {
   return async (
     request: GenerateRequest<typeof DeepSeekConfigSchema>,
-    streamingCallback?: StreamingCallback<ChatCompletionChunk>
+    streamingCallback?: StreamingCallback<GenerateResponseChunkData>
   ): Promise<GenerateResponseData> => {
-    let response: any;
-    // Build the DeepSeek request body.
-    const body = toDeepSeekRequestBody(name, request);
+    let response: ChatCompletion;
+    // 调用 DeepSeek API 的请求体
+    const body: ChatCompletionCreateParamsBase = toDeepSeekRequestBody(
+      name,
+      request
+    );
 
     if (streamingCallback) {
-      // Enable streaming when a callback is provided.
+      // 启用流式响应
       const stream = client.beta.chat.completions.stream({
         ...body,
         stream: true,
       });
       for await (const chunk of stream) {
-        streamingCallback(chunk);
-        // chunk.choices?.forEach((chunkChoice: ChatCompletionChunk.Choice) => {
-        //   const candidate = fromDeepSeekChunkChoice(chunkChoice);
-        //   streamingCallback({
-        //     index: candidate.index,
-        //     content: candidate.message.content,
-        //   });
-        // });
+        chunk.choices?.forEach((chunkChoice: ChatCompletionChunk.Choice) => {
+          const generateResponseChunkData =
+            fromDeepSeekChunkChoice(chunkChoice);
+          streamingCallback(generateResponseChunkData);
+        });
       }
       response = await stream.finalChatCompletion();
     } else {
-      // Standard (non-streaming) request.
-      response = await client.chat.completions.create(body);
+      // 非流式响应
+      response = (await client.chat.completions.create(body)) as ChatCompletion;
     }
 
-    // Map the DeepSeek response into Genkit's expected format.
-    return {
-      candidates: response.choices.map((c: ChatCompletionChunk.Choice) =>
-        fromDeepSeekChunkChoice(c)
-      ),
+    const generateResponseData: GenerateResponseData = {
+      candidates: response.choices.map<
+        NonNullable<GenerateResponseData["candidates"]>[number]
+      >((choice: ChatCompletion.Choice) => {
+        return {
+          index: choice.index,
+          message: {
+            role: fromDeepSeekRole(choice.message.role),
+            content: [
+              {
+                text: choice.message.content || "",
+                media: undefined,
+                // TODO: 如果工具调用有多个，怎么处理呢？
+                toolRequest: (_.isEmpty(choice.message?.tool_calls)
+                  ? undefined
+                  : choice.message.tool_calls?.map((toolCall) => {
+                      return {
+                        name: toolCall.function.name,
+                        ref: toolCall.id,
+                        input: JSON.parse(toolCall.function.arguments || "{}"),
+                      };
+                    })) as any,
+                toolResponse: undefined,
+                data: undefined,
+                metadata: undefined,
+                custom: undefined,
+                reasoning: undefined,
+                resource: undefined,
+              },
+            ],
+            metadata: undefined,
+          },
+          finishReason: fromDeepSeekFinishReason(
+            choice.finish_reason
+          ) as Exclude<GenerateResponseData["finishReason"], undefined>,
+          finishMessage: "",
+          custom: choice,
+          usage: {
+            inputTokens: response.usage?.prompt_tokens,
+            outputTokens: response.usage?.completion_tokens,
+            totalTokens: response.usage?.total_tokens,
+          },
+        };
+      }),
+      finishReason: fromDeepSeekFinishReason(response.choices[0].finish_reason),
+      finishMessage: "",
       usage: {
         inputTokens: response.usage?.prompt_tokens,
         outputTokens: response.usage?.completion_tokens,
@@ -312,5 +297,7 @@ export function deepseekRunner(name: string, client: OpenAI) {
       },
       custom: response,
     };
+
+    return generateResponseData;
   };
 }

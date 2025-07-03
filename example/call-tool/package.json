@@ -16,9 +16,11 @@
   "dependencies": {
     "dotenv": "^16.4.7",
     "genkit": "^1.0.4",
-    "genkitx-deepseek": "file:../../"
+    "genkitx-deepseek": "file:../../",
+    "lodash": "^4.17.21"
   },
   "devDependencies": {
+    "@types/lodash": "^4.17.20",
     "@types/node": "^16.18.126",
     "genkit-cli": "^1.0.4",
     "tsx": "^4.20.3",

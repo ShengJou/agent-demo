@@ -1,14 +1,13 @@
-
 /**
- * Removes keys with null or undefined values from an object.
+ * 从对象中删除值为 null 或 undefined 的键。
  *
- * @template T - The type of the object.
- * @param {T} obj - The object from which to remove empty keys.
- * @returns {T} - The object with empty keys removed.
+ * @template T - 对象的类型。
+ * @param {T} obj - 要删除空键的对象。
+ * @returns {T} - 删除空键后的对象。
  */
 export function removeEmptyKeys<T extends Record<string, any>>(obj: T): T {
   for (const key of Object.keys(obj) as Array<keyof T>) {
-    if (obj[key] == null) { 
+    if (obj[key] == null) {
       delete obj[key];
     }
   }
