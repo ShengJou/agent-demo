@@ -17,7 +17,8 @@
     "dotenv": "^16.4.7",
     "genkit": "^1.0.4",
     "genkitx-deepseek": "file:../../",
-    "lodash": "^4.17.21"
+    "lodash": "^4.17.21",
+    "node-fetch": "^3.3.2"
   },
   "devDependencies": {
     "@types/lodash": "^4.17.20",

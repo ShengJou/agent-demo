@@ -1,18 +1,19 @@
 #!/usr/bin/env node
 
-import readline from "node:readline";
-import { ai } from "./genkit";
-import { searchMovies, searchPeople } from "./tools";
+import readline from 'node:readline';
+import { ai } from './genkit';
+import { searchMovies, searchPeople } from './tools';
+import { GenerateOptions, ToolResponsePart } from 'genkit';
 
 // --- ANSI Colors ---
 const colors = {
-  reset: "\x1b[0m",
-  green: "\x1b[32m",
-  yellow: "\x1b[33m",
-  blue: "\x1b[34m",
-  cyan: "\x1b[36m",
-  red: "\x1b[31m",
-  dim: "\x1b[2m",
+  reset: '\x1b[0m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  blue: '\x1b[34m',
+  cyan: '\x1b[36m',
+  red: '\x1b[31m',
+  dim: '\x1b[2m',
 };
 
 function colorize(color: keyof typeof colors, text: string): string {
@@ -23,31 +24,18 @@ function colorize(color: keyof typeof colors, text: string): string {
 const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout,
-  prompt: colorize("cyan", "You: "),
+  prompt: colorize('cyan', 'You: '),
 });
-
-// --- State ---
-let conversation: Array<any> = [
-  {
-    role: "system",
-    content: [
-      {
-        type: "text",
-        text: "You are a helpful assistant that can search for movies and people in the entertainment industry. Use the available tools when needed to provide accurate and detailed responses.",
-      },
-    ],
-  },
-];
 
 // --- Main Loop ---
 async function main() {
-  console.log(colorize("blue", `🤖 DeepSeek Agent`));
-  console.log(colorize("dim", `Type /help for help, /exit to quit\n`));
+  console.log(colorize('blue', `🤖 DeepSeek Agent`));
+  console.log(colorize('dim', `Type /help for help, /exit to quit\n`));
 
-  rl.setPrompt(colorize("cyan", `You: `));
+  rl.setPrompt(colorize('cyan', `You: `));
   rl.prompt();
 
-  rl.on("line", async (line) => {
+  rl.on('line', async (line) => {
     const input = line.trim();
 
     if (!input) {
@@ -56,164 +44,103 @@ async function main() {
     }
 
     // Handle commands
-    if (input.toLowerCase() === "/help") {
-      console.log(colorize("blue", "\nCommands:"));
-      console.log(colorize("dim", "  /clear - Clear history"));
-      console.log(colorize("dim", "  /history - Show recent messages"));
-      console.log(colorize("dim", "  /exit - Quit\n"));
+    if (input.toLowerCase() === '/help') {
+      console.log(colorize('blue', '\nCommands:'));
+      console.log(colorize('dim', '  /exit - Quit\n'));
       rl.prompt();
       return;
     }
 
-    if (input.toLowerCase() === "/clear") {
-      conversation = [
-        {
-          role: "system",
-          content: [
-            {
-              type: "text",
-              text: "You are a helpful assistant that can search for movies and people in the entertainment industry. Use the available tools when needed to provide accurate and detailed responses.",
-            },
-          ],
-        },
-      ];
-      console.log(colorize("yellow", "Cleared\n"));
-      rl.prompt();
-      return;
-    }
-
-    if (input.toLowerCase() === "/history") {
-      const userMessages = conversation.filter(
-        (msg) => msg.role === "user"
-      ).length;
-      const modelMessages = conversation.filter(
-        (msg) => msg.role === "model"
-      ).length;
-
-      // Get recent messages (excluding system message)
-      const recentMessages = conversation
-        .filter((msg) => msg.role !== "system")
-        .slice(-3); // Last 3 messages
-
-      console.log(
-        colorize("blue", `\nTotal: ${userMessages}/${modelMessages}`)
-      );
-
-      if (recentMessages.length > 0) {
-        console.log(colorize("dim", "Recent:"));
-        recentMessages.forEach((msg, index) => {
-          const text = msg.content[0]?.text || "";
-          const truncated =
-            text.length > 60 ? text.substring(0, 60) + "..." : text;
-          const prefix = msg.role === "user" ? ">" : "<";
-          console.log(colorize("dim", `  ${prefix} ${truncated}`));
-        });
-      }
-
-      console.log();
-      rl.prompt();
-      return;
-    }
-
-    if (input.toLowerCase() === "/exit") {
-      console.log(colorize("yellow", "Bye!"));
+    if (input.toLowerCase() === '/exit') {
+      console.log(colorize('yellow', 'Bye!'));
       rl.close();
       return;
     }
 
     // Process user message with AI
     try {
-      // Add user message to conversation
-      conversation.push({
-        role: "user",
-        content: [{ type: "text", text: input }],
-      });
-
-      const { response, stream } = await ai.generateStream({
-        messages: conversation,
+      const generateOptions: GenerateOptions = {
+        system: '你是一个乐于助人的助手，能够查找娱乐行业的电影和人物信息。',
+        prompt: input,
+        messages: [],
         tools: [searchMovies, searchPeople],
-      });
+        toolChoice: 'auto',
+        returnToolRequests: true, // When true, return tool calls for manual processing instead of automatically resolving them.
+        config: {
+          temperature: 1.0,
+          topP: 1.0,
+          truncation: 'disabled',
+          presence_penalty: 0.0,
+          frequency_penalty: 0.0,
+        },
+      };
 
-      // Print assistant label
-      process.stdout.write(colorize("green", "Assistant: "));
+      while (true) {
+        const { response, stream } = await ai.generateStream(generateOptions);
 
-      // Process stream for real-time output
-      for await (const chunk of stream) {
-        if (chunk.text) {
-          process.stdout.write(chunk.text);
+        // Process stream for real-time output
+        for await (const chunk of stream) {
+          if (chunk.text) {
+            process.stdout.write(chunk.text);
+          }
         }
+        console.log('/n');
 
-        // Log tool calls - check for content with toolRequest
-        if (chunk.content) {
-          chunk.content.forEach((content: any) => {
-            if (content.toolRequest) {
-              console.log(
-                colorize(
-                  "yellow",
-                  `\n🔧 Calling tool: ${content.toolRequest.name}`
-                )
-              );
-              console.log(
-                colorize(
-                  "dim",
-                  `   Arguments: ${JSON.stringify(content.toolRequest.input)}`
-                )
-              );
+        const llmResponse = await response;
+        const toolRequests = llmResponse.toolRequests;
+        if (toolRequests.length < 1) {
+          break;
+        }
+        const toolResponses: ToolResponsePart[] = await Promise.all(
+          toolRequests.map(async (part) => {
+            switch (part.toolRequest.name) {
+              case 'searchMovies':
+                return {
+                  toolResponse: {
+                    name: part.toolRequest.name,
+                    ref: part.toolRequest.ref,
+                    output: await searchMovies(
+                      JSON.parse(part.toolRequest.input as string)
+                    ),
+                  },
+                };
+              case 'searchPeople':
+                return {
+                  toolResponse: {
+                    name: part.toolRequest.name,
+                    ref: part.toolRequest.ref,
+                    output: await searchPeople(
+                      JSON.parse(part.toolRequest.input as string)
+                    ),
+                  },
+                };
+              default:
+                throw Error('Tool not found');
             }
-          });
-        }
-
-        // Also check for legacy tool call format
-        if (
-          "type" in chunk &&
-          chunk.type === "tool-call" &&
-          "toolName" in chunk
-        ) {
-          console.log(
-            colorize("yellow", `\n🔧 Calling tool: ${(chunk as any).toolName}`)
-          );
-        }
-
-        // Log tool results
-        if (
-          "type" in chunk &&
-          chunk.type === "tool-result" &&
-          "toolName" in chunk
-        ) {
-          console.log(
-            colorize("green", `✅ Tool ${(chunk as any).toolName} completed`)
-          );
-        }
+          })
+        );
+        // 更新历史消息
+        generateOptions.messages = llmResponse.messages;
+        // 更新提示语
+        generateOptions.prompt = toolResponses;
       }
-
-      // Wait for complete response and add to conversation history
-      const finalResponse = await response;
-      if (finalResponse.text?.trim()) {
-        conversation.push({
-          role: "model",
-          content: [{ type: "text", text: finalResponse.text }],
-        });
-      }
-
-      console.log("\n");
     } catch (error: any) {
-      console.error(colorize("red", "Error:"), error.message);
+      console.error(colorize('red', 'Error:'), error.message);
 
-      if (error.message?.includes("API key")) {
-        console.error(colorize("yellow", "Check .env file"));
+      if (error.message?.includes('API key')) {
+        console.error(colorize('yellow', 'Check .env file'));
       }
-      console.log();
     } finally {
       rl.prompt();
     }
-  }).on("close", () => {
-    console.log(colorize("yellow", "Bye!"));
+  }).on('close', () => {
+    console.log(colorize('yellow', 'Bye!'));
     process.exit(0);
   });
 }
 
 // --- Start ---
 main().catch((err) => {
-  console.error(colorize("red", "Unhandled error in main:"), err);
+  console.error(colorize('red', 'Unhandled error in main:'), err);
   process.exit(1);
 });

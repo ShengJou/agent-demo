@@ -13,16 +13,16 @@ import {
   GenerateResponseData,
   Message,
   StreamingCallback,
-} from "genkit";
-import { GenerateResponseChunkData } from "genkit/model";
-import OpenAI from "openai";
+} from 'genkit';
+import { GenerateResponseChunkData } from 'genkit/model';
+import OpenAI from 'openai';
 import {
   ChatCompletion,
   ChatCompletionChunk,
   ChatCompletionCreateParamsBase,
-} from "openai/resources/chat/completions";
-import { DeepSeekConfigSchema, SUPPORTED_DEEPSEEK_MODELS } from "./models";
-import _ from "lodash";
+} from 'openai/resources/chat/completions';
+import { DeepSeekConfigSchema, SUPPORTED_DEEPSEEK_MODELS } from './models';
+import _ from 'lodash';
 
 /**
  * @description 将 DeepSeek 角色转换为 Genkit 角色。
@@ -31,12 +31,12 @@ import _ from "lodash";
  */
 export function fromDeepSeekRole(
   role: string | undefined
-): GenerateRequest<typeof DeepSeekConfigSchema>["messages"][number]["role"] {
-  if (role === "assistant") return "model";
-  if (role === "system") return "system";
-  if (role === "user") return "user";
-  if (role === "tool") return "tool";
-  return "model";
+): GenerateRequest<typeof DeepSeekConfigSchema>['messages'][number]['role'] {
+  if (role === 'assistant') return 'model';
+  if (role === 'system') return 'system';
+  if (role === 'user') return 'user';
+  if (role === 'tool') return 'tool';
+  return 'model';
 }
 
 /**
@@ -45,14 +45,14 @@ export function fromDeepSeekRole(
  * @returns Genkit 的 finishReason。
  */
 export function fromDeepSeekFinishReason(
-  finishReason: ChatCompletion.Choice["finish_reason"]
-): GenerateResponseData["finishReason"] {
-  if (finishReason === "stop") return "stop";
-  if (finishReason === "length") return "length";
-  if (finishReason === "tool_calls") return "stop";
-  if (finishReason === "content_filter") return "stop";
-  if (finishReason === "function_call") return "stop";
-  return "other";
+  finishReason: ChatCompletion.Choice['finish_reason']
+): GenerateResponseData['finishReason'] {
+  if (finishReason === 'stop') return 'stop';
+  if (finishReason === 'length') return 'length';
+  if (finishReason === 'tool_calls') return 'stop';
+  if (finishReason === 'content_filter') return 'stop';
+  if (finishReason === 'function_call') return 'stop';
+  return 'other';
 }
 /**
  * 将 DeepSeek API 响应的块数据转换为 Genkit 的 GenerateResponseChunkData。
@@ -68,7 +68,7 @@ export function fromDeepSeekChunkChoice(
     index: choice.index,
     content: [
       {
-        text: choice.delta.content || "",
+        text: choice.delta.content || '',
         media: undefined,
         toolRequest: undefined,
         toolResponse: undefined,
@@ -91,31 +91,31 @@ export function fromDeepSeekChunkChoice(
  * @returns 格式化用于 DeepSeek 处理的 ChatCompletionMessageParam 对象数组。
  */
 function toDeepSeekMessages(
-  messages: GenerateRequest<typeof DeepSeekConfigSchema>["messages"]
+  messages: GenerateRequest<typeof DeepSeekConfigSchema>['messages']
 ) {
   return messages.map((msg) => {
     const m = new Message(msg);
     switch (m.role) {
-      case "system":
+      case 'system':
         return {
-          role: "system" as const,
+          role: 'system' as const,
           content: m.text,
         };
-      case "user":
+      case 'user':
         return {
-          role: "user" as const,
+          role: 'user' as const,
           content: m.text,
         };
-      case "model":
+      case 'model':
         return {
-          role: "assistant" as const,
+          role: 'assistant' as const,
           content: m.text,
         };
-      case "tool":
+      case 'tool':
         return {
-          role: "tool" as const,
+          role: 'tool' as const,
           content: m.text,
-          tool_call_id: m.toolRequests.at(0)?.toolRequest.ref || "default",
+          tool_call_id: m.toolRequests.at(0)?.toolRequest.ref || 'default',
         };
       default:
         throw new Error(`不支持的角色: ${m.role}`);
@@ -131,16 +131,16 @@ function toDeepSeekMessages(
  */
 function toDeepSeekTool(
   tool: NonNullable<
-    GenerateRequest<typeof DeepSeekConfigSchema>["tools"]
+    GenerateRequest<typeof DeepSeekConfigSchema>['tools']
   >[number]
 ) {
   return {
-    type: "function" as const,
+    type: 'function' as const,
     function: {
       name: tool.name,
       description: tool.description,
       parameters: {
-        type: tool.inputSchema?.type || "object",
+        type: tool.inputSchema?.type || 'object',
         required: tool.inputSchema?.required || [],
         properties: tool.inputSchema?.properties || {},
         additionalProperties: tool.inputSchema?.additionalProperties || false,
@@ -175,7 +175,7 @@ export function toDeepSeekRequestBody(
 
   const config = request.config;
   if (!config) {
-    throw new Error("请求中缺少配置");
+    throw new Error('请求中缺少配置');
   }
 
   const body: ChatCompletionCreateParamsBase = {
@@ -192,9 +192,9 @@ export function toDeepSeekRequestBody(
     tools: request.tools?.map(toDeepSeekTool),
     tool_choice:
       request.tools && request.tools.length > 0
-        ? (config as any).tool_choice || "auto"
-        : "none",
-    response_format: { type: "text" }, // DeepSeek 只支持文本响应
+        ? (config as any).tool_choice || 'auto'
+        : 'none',
+    response_format: { type: 'text' }, // DeepSeek 只支持文本响应
     stream: false, // 如果提供流式回调，将切换为 true
     stream_options: null,
   };
@@ -246,41 +246,58 @@ export function deepseekRunner(name: string, client: OpenAI) {
 
     const generateResponseData: GenerateResponseData = {
       candidates: response.choices.map<
-        NonNullable<GenerateResponseData["candidates"]>[number]
+        NonNullable<GenerateResponseData['candidates']>[number]
       >((choice: ChatCompletion.Choice) => {
         return {
           index: choice.index,
           message: {
             role: fromDeepSeekRole(choice.message.role),
             content: [
-              {
-                text: choice.message.content || "",
-                media: undefined,
-                // TODO: 如果工具调用有多个，怎么处理呢？
-                toolRequest: (_.isEmpty(choice.message?.tool_calls)
-                  ? undefined
-                  : choice.message.tool_calls?.map((toolCall) => {
-                      return {
-                        name: toolCall.function.name,
-                        ref: toolCall.id,
-                        input: JSON.parse(toolCall.function.arguments || "{}"),
-                      };
-                    })) as any,
-                toolResponse: undefined,
-                data: undefined,
-                metadata: undefined,
-                custom: undefined,
-                reasoning: undefined,
-                resource: undefined,
-              },
+              ...(choice.message.content
+                ? [
+                    {
+                      text: choice.message.content,
+                      media: undefined,
+                      toolRequest: undefined,
+                      toolResponse: undefined,
+                      data: undefined,
+                      metadata: undefined,
+                      custom: undefined,
+                      reasoning: undefined,
+                      resource: undefined,
+                    },
+                  ]
+                : []),
+              ...(!_.isEmpty(choice.message?.tool_calls) &&
+              choice.message.tool_calls?.[0]?.function?.name &&
+              choice.message.tool_calls?.[0]?.id &&
+              choice.message.tool_calls?.[0]?.function?.arguments
+                ? [
+                    {
+                      text: undefined,
+                      media: undefined,
+                      toolRequest: {
+                        name: choice.message.tool_calls[0].function.name,
+                        ref: choice.message.tool_calls[0].id,
+                        input: choice.message.tool_calls[0].function.arguments,
+                      },
+                      toolResponse: undefined,
+                      data: undefined,
+                      metadata: undefined,
+                      custom: undefined,
+                      reasoning: undefined,
+                      resource: undefined,
+                    },
+                  ]
+                : []),
             ],
             metadata: undefined,
           },
           finishReason: fromDeepSeekFinishReason(
             choice.finish_reason
-          ) as Exclude<GenerateResponseData["finishReason"], undefined>,
-          finishMessage: "",
-          custom: choice,
+          ) as Exclude<GenerateResponseData['finishReason'], undefined>,
+          finishMessage: '',
+          custom: undefined,
           usage: {
             inputTokens: response.usage?.prompt_tokens,
             outputTokens: response.usage?.completion_tokens,
@@ -289,7 +306,7 @@ export function deepseekRunner(name: string, client: OpenAI) {
         };
       }),
       finishReason: fromDeepSeekFinishReason(response.choices[0].finish_reason),
-      finishMessage: "",
+      finishMessage: '',
       usage: {
         inputTokens: response.usage?.prompt_tokens,
         outputTokens: response.usage?.completion_tokens,

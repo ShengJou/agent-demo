@@ -4,21 +4,25 @@
  * @param query The search query
  * @returns Promise that resolves to the API response data
  */
+
 export async function callTmdbApi(endpoint: string, query: string) {
   // Validate API key
   const apiKey = process.env.TMDB_API_KEY;
   if (!apiKey) {
-    throw new Error("TMDB_API_KEY environment variable is not set");
+    throw new Error('TMDB_API_KEY environment variable is not set');
   }
 
   try {
+    // 动态导入 fetch
+    const { default: fetch } = await import('node-fetch');
+
     // Make request to TMDB API
     const url = new URL(`https://api.themoviedb.org/3/search/${endpoint}`);
-    url.searchParams.append("api_key", apiKey);
-    url.searchParams.append("query", query);
-    url.searchParams.append("include_adult", "false");
-    url.searchParams.append("language", "en-US");
-    url.searchParams.append("page", "1");
+    url.searchParams.append('api_key', apiKey);
+    url.searchParams.append('query', query);
+    url.searchParams.append('include_adult', 'false');
+    url.searchParams.append('language', 'en-US');
+    url.searchParams.append('page', '1');
 
     const response = await fetch(url.toString());
 
