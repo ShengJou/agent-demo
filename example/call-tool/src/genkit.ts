@@ -5,11 +5,11 @@ import path from "path";
 
 dotenv.config();
 
-// configure a Genkit instance
+// 配置 Genkit 实例
 export const ai = genkit({
   plugins: [deepseek({ apiKey: process.env.DEEPSEEK_API_KEY })],
   model: deepseekReasoner,
-  // Directory where dotprompts are stored.
+  // 存储点提示的目录。
   promptDir: path.join(__dirname, "../prompts"),
 });
 

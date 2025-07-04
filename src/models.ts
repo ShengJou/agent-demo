@@ -23,7 +23,7 @@ export const deepseekChat = modelRef({
     label: "DeepSeek - Chat",
     supports: {
       media: false, // 模型是否可以处理媒体作为提示的一部分（多模态输入）。
-      output: ["text"], // 模型可以输出的数据类型。
+      output: ["text", "json"], // 模型可以输出的数据类型。
       multiturn: true, // 模型是否可以处理随提示传递的历史消息。
       systemRole: true, // 模型是否可以接受角色为 "system" 的消息。
       tools: true, // 模型是否可以执行工具调用。
@@ -40,7 +40,7 @@ export const deepseekReasoner = modelRef({
     label: "DeepSeek - Reasoner",
     supports: {
       media: false, // 模型是否可以处理媒体作为提示的一部分（多模态输入）。
-      output: ["text"], // 模型可以输出的数据类型。
+      output: ["text", "json"], // 模型可以输出的数据类型。
       multiturn: true, // 模型是否可以处理随提示传递的历史消息。
       systemRole: true, // 模型是否可以接受角色为 "system" 的消息。
       tools: true, // 模型是否可以执行工具调用。
