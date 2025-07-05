@@ -18,8 +18,8 @@
  * 使用前需要设置环境变量：TMDB_API_KEY
  */
 
-import { ai, z } from "./genkit";
-import { callTmdbApi } from "./tmdb";
+import { ai, z } from './genkit';
+import { callTmdbApi } from './tmdb';
 
 /**
  * TMDB API 响应的通用结构
@@ -100,19 +100,19 @@ interface PersonResult {
  */
 export const searchMovies = ai.defineTool(
   {
-    name: "searchMovies",
-    description: "按标题在TMDB中搜索电影",
+    name: 'searchMovies',
+    description: '按标题在TMDB中搜索电影',
     inputSchema: z.object({
-      query: z.string().describe("要搜索的电影标题或关键词"),
+      query: z.string().describe('要搜索的电影标题或关键词'),
     }),
   },
   async ({ query }) => {
     console.log();
-    console.log("正在调用[tmdb:searchMovies]，参数：", JSON.stringify(query));
+    console.log('正在调用[tmdb:searchMovies]，参数：', JSON.stringify(query));
     console.log();
     try {
       // 调用 TMDB API 搜索电影
-      const data = await callTmdbApi<Response<MovieResult>>("movie", query);
+      const data = await callTmdbApi<Response<MovieResult>>('movie', query);
 
       // 处理搜索结果，转换图片路径为完整URL
       const results = data.results.map((movie: MovieResult) => {
@@ -138,13 +138,13 @@ ${results
    - 受欢迎程度：${movie.popularity}
    - 海报链接：${movie.poster_path}`
   )
-  .join("\n\n")}
+  .join('\n\n')}
 
 请根据以上信息为用户提供有用的电影推荐或答案。`;
 
       return content;
     } catch (error) {
-      console.error("搜索电影时出错:", error);
+      console.error('搜索电影时出错:', error);
       throw error; // 重新抛出错误让 Genkit 处理
     }
   }
@@ -164,19 +164,21 @@ ${results
  */
 export const searchPeople = ai.defineTool(
   {
-    name: "searchPeople",
-    description: "按姓名在TMDB中搜索人物",
+    name: 'searchPeople',
+    description: '按姓名在TMDB中搜索人物',
     inputSchema: z.object({
-      query: z.string().describe("要搜索的人物姓名或关键词"),
+      query: z.string().describe('要搜索的人物姓名或关键词'),
     }),
   },
   async ({ query }) => {
-    console.log();
-    console.log("正在调用[tmdb:searchPeople]，参数：", JSON.stringify(query));
-    console.log();
+    console.log(
+      '\n正在调用[tmdb:searchPeople]，参数：',
+      JSON.stringify(query),
+      '\n'
+    );
     try {
       // 调用 TMDB API 搜索人物
-      const data = await callTmdbApi<Response<PersonResult>>("person", query);
+      const data = await callTmdbApi<Response<PersonResult>>('person', query);
 
       // 处理搜索结果，转换图片路径为完整URL
       const results = data.results.map((person: any) => {
@@ -209,7 +211,7 @@ ${results
       `${index + 1}. ${person.name} (${person.original_name})
    - 主要职业：${person.known_for_department}
    - 受欢迎程度：${person.popularity}
-   - 头像链接：${person.profile_path || "暂无"}
+   - 头像链接：${person.profile_path || '暂无'}
    - 代表作品：
 ${
   person.known_for && person.known_for.length > 0
@@ -217,33 +219,33 @@ ${
         .map(
           (work, workIndex) =>
             `     ${workIndex + 1}. 《${work.title}》${
-              work.original_title ? ` (${work.original_title})` : ""
+              work.original_title ? ` (${work.original_title})` : ''
             }
         - 类型：${
-          work.media_type === "movie"
-            ? "电影"
-            : work.media_type === "tv"
-            ? "电视剧"
-            : "其他"
+          work.media_type === 'movie'
+            ? '电影'
+            : work.media_type === 'tv'
+            ? '电视剧'
+            : '其他'
         }
-        - 上映日期：${work.release_date || "未知"}
+        - 上映日期：${work.release_date || '未知'}
         - 评分：${work.vote_average}/10
         - 简介：${
-          work.overview ? work.overview.substring(0, 100) + "..." : "暂无简介"
+          work.overview ? work.overview.substring(0, 100) + '...' : '暂无简介'
         }`
         )
-        .join("\n")
-    : "     暂无代表作品信息"
+        .join('\n')
+    : '     暂无代表作品信息'
 }
    - 人物ID：${person.id}`
   )
-  .join("\n\n")}
+  .join('\n\n')}
 
 请根据以上信息为用户提供有用的人物介绍或答案。`;
 
       return content;
     } catch (error) {
-      console.error("搜索人物时出错:", error);
+      console.error('搜索人物时出错:', error);
       throw error; // 重新抛出错误让 Genkit 处理
     }
   }

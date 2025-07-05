@@ -14,7 +14,10 @@ import {
   Message,
   StreamingCallback,
 } from 'genkit';
-import { GenerateResponseChunkData } from 'genkit/model';
+import {
+  GenerateResponseChunkData,
+  GenerateResponseSchema,
+} from 'genkit/model';
 import OpenAI from 'openai';
 import {
   ChatCompletion,
@@ -222,9 +225,8 @@ export function toDeepSeekRequestBody(
     top_logprobs: config.topLogProbs,
     tools: request.tools?.map(toDeepSeekTool),
     tool_choice:
-      request.tools && request.tools.length > 0
-        ? (config as any).tool_choice || 'auto'
-        : 'none',
+      request.toolChoice ??
+      (request.tools && request.tools.length > 0 ? 'auto' : 'none'),
     response_format: { type: 'text' }, // DeepSeek 只支持文本响应
     stream: false, // 如果提供流式回调，将切换为 true
     stream_options: null,
@@ -279,6 +281,7 @@ export function deepseekRunner(name: string, client: OpenAI) {
       candidates: response.choices.map<
         NonNullable<GenerateResponseData['candidates']>[number]
       >((choice: ChatCompletion.Choice) => {
+        const tool_calls = choice.message?.tool_calls;
         return {
           index: choice.index,
           message: {
@@ -299,19 +302,23 @@ export function deepseekRunner(name: string, client: OpenAI) {
                     },
                   ]
                 : []),
-              ...(!_.isEmpty(choice.message?.tool_calls) &&
-              choice.message.tool_calls?.[0]?.function?.name &&
-              choice.message.tool_calls?.[0]?.id &&
-              choice.message.tool_calls?.[0]?.function?.arguments
+              ...(!_.isEmpty(tool_calls) &&
+              tool_calls?.[0]?.function?.name &&
+              tool_calls?.[0]?.id &&
+              tool_calls?.[0]?.function?.arguments
                 ? [
                     {
                       text: undefined,
                       media: undefined,
                       toolRequest: {
-                        name: choice.message.tool_calls[0].function.name,
-                        ref: choice.message.tool_calls[0].id,
+                        name: z.string().parse(tool_calls[0].function.name),
+                        ref: z.string().parse(tool_calls[0].id),
                         input: JSON.parse(
-                          choice.message.tool_calls[0].function.arguments
+                          z
+                            .string({
+                              invalid_type_error: '工具调用参数必须是字符串',
+                            })
+                            .parse(tool_calls[0].function.arguments)
                         ),
                       },
                       toolResponse: undefined,

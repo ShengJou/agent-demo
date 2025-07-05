@@ -20,10 +20,10 @@
  * - /exit：退出程序
  */
 
-import readline from "node:readline";
-import { ai } from "./genkit";
-import { searchMovies, searchPeople } from "./tools";
-import { GenerateOptions, ToolResponsePart } from "genkit";
+import readline from 'node:readline';
+import { ai } from './genkit';
+import { searchMovies, searchPeople } from './tools';
+import { GenerateOptions, ToolResponsePart, z } from 'genkit';
 
 // --- ANSI 颜色定义 ---
 /**
@@ -31,13 +31,13 @@ import { GenerateOptions, ToolResponsePart } from "genkit";
  * 用于美化输出，提供更好的用户体验
  */
 const colors = {
-  reset: "\x1b[0m", // 重置颜色
-  green: "\x1b[32m", // 绿色
-  yellow: "\x1b[33m", // 黄色
-  blue: "\x1b[34m", // 蓝色
-  cyan: "\x1b[36m", // 青色
-  red: "\x1b[31m", // 红色
-  dim: "\x1b[2m", // 暗淡
+  reset: '\x1b[0m', // 重置颜色
+  green: '\x1b[32m', // 绿色
+  yellow: '\x1b[33m', // 黄色
+  blue: '\x1b[34m', // 蓝色
+  cyan: '\x1b[36m', // 青色
+  red: '\x1b[31m', // 红色
+  dim: '\x1b[2m', // 暗淡
 };
 
 /**
@@ -58,7 +58,7 @@ function colorize(color: keyof typeof colors, text: string): string {
 const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout,
-  prompt: colorize("cyan", "You: "),
+  prompt: colorize('cyan', 'You: '),
 });
 
 // --- 主循环 ---
@@ -74,14 +74,14 @@ const rl = readline.createInterface({
  */
 async function main() {
   // 显示欢迎信息
-  console.log(colorize("blue", `🤖 DeepSeek Agent`));
-  console.log(colorize("dim", `输入 /help 获取帮助，/exit 退出\n`));
+  console.log(colorize('blue', `🤖 DeepSeek Agent`));
+  console.log(colorize('dim', `输入 /help 获取帮助，/exit 退出\n`));
 
-  rl.setPrompt(colorize("cyan", `You: `));
+  rl.setPrompt(colorize('cyan', `You: `));
   rl.prompt();
 
   // 监听用户输入
-  rl.on("line", async (line) => {
+  rl.on('line', async (line) => {
     const input = line.trim();
 
     // 跳过空输入
@@ -91,15 +91,15 @@ async function main() {
     }
 
     // 处理系统命令
-    if (input.toLowerCase() === "/help") {
-      console.log(colorize("blue", "\n命令:"));
-      console.log(colorize("dim", "  /exit - 退出\n"));
+    if (input.toLowerCase() === '/help') {
+      console.log(colorize('blue', '\n命令:'));
+      console.log(colorize('dim', '  /exit - 退出\n'));
       rl.prompt();
       return;
     }
 
-    if (input.toLowerCase() === "/exit") {
-      console.log(colorize("yellow", "再见!"));
+    if (input.toLowerCase() === '/exit') {
+      console.log(colorize('yellow', '再见!'));
       rl.close();
       return;
     }
@@ -111,13 +111,13 @@ async function main() {
        * 包括系统提示词、工具、生成参数等
        */
       const generateOptions: GenerateOptions = {
-        system: "你是一个乐于助人的助手，能够查找娱乐行业的电影和人物信息。",
+        system: '你是一个乐于助人的助手，能够查找娱乐行业的电影和人物信息。',
         prompt: input,
         messages: [], // 对话历史消息
         tools: [searchMovies, searchPeople], // 可用的工具
-        toolChoice: "auto", // 自动选择是否使用工具
+        toolChoice: 'auto', // 自动选择是否使用工具
         maxTurns: 5, // 最大对话轮数
-        // returnToolRequests: true, // 当为 true 时，返回工具调用以进行手动处理，而不是自动解析它们。
+        returnToolRequests: true, // 当为 true 时，返回工具调用以进行手动处理，而不是自动解析它们。
         config: {
           temperature: 0.7, // 创造性参数：0(确定) - 2(创造)
           /**
@@ -156,7 +156,7 @@ async function main() {
            * - k值过大（如k=整个词表大小）：相当于原始的多项式采样（multinomial sampling），随机性大。
            */
           topK: 1,
-          truncation: "disabled", // 禁用截断
+          truncation: 'disabled', // 禁用截断
           presence_penalty: 0.0, // 存在惩罚：减少重复主题
           frequency_penalty: 0.0, // 频率惩罚：减少重复词汇
         },
@@ -177,6 +177,8 @@ async function main() {
           }
         }
 
+        /** ============= 以下是手动执行 tool 然后将响应传递给 llm 的示例 =================== */
+
         // 获取完整响应
         const llmResponse = await response;
         const toolRequests = llmResponse.toolRequests;
@@ -194,57 +196,92 @@ async function main() {
           toolRequests.map(async (part) => {
             // 解析工具名称并调用对应的工具
             switch (part.toolRequest.name) {
-              case "searchMovies":
+              case 'searchMovies':
                 return {
                   toolResponse: {
                     name: part.toolRequest.name,
                     ref: part.toolRequest.ref,
                     output: await searchMovies(
-                      JSON.parse(part.toolRequest.input as string)
+                      z
+                        .object(
+                          {
+                            query: z.string(),
+                          },
+                          {
+                            invalid_type_error: 'query 必须是字符串',
+                          }
+                        )
+                        .parse(part.toolRequest.input)
                     ),
                   },
                 };
-              case "searchPeople":
+              case 'searchPeople':
                 return {
                   toolResponse: {
                     name: part.toolRequest.name,
                     ref: part.toolRequest.ref,
                     output: await searchPeople(
-                      JSON.parse(part.toolRequest.input as string)
+                      z
+                        .object(
+                          {
+                            query: z.string(),
+                          },
+                          {
+                            invalid_type_error: 'query 必须是字符串',
+                          }
+                        )
+                        .parse(part.toolRequest.input)
                     ),
                   },
                 };
               default:
-                throw Error("未找到工具");
+                throw Error('未找到工具');
             }
           })
         );
 
         // 更新对话历史和下一轮的输入
-        generateOptions.messages = llmResponse.messages;
-        generateOptions.prompt = toolResponses;
+        generateOptions.messages = [
+          ...llmResponse.messages,
+          {
+            role: 'tool',
+            content: toolResponses.map((part) => ({
+              custom: undefined,
+              data: undefined,
+              media: undefined,
+              metadata: undefined,
+              reasoning: undefined,
+              resource: undefined,
+              text: undefined,
+              toolRequest: undefined,
+              toolResponse: part.toolResponse,
+            })),
+          },
+        ];
+
+        /** ============= 以上是手动执行 tool 然后将响应传递给 llm 的示例 =================== */
       }
     } catch (error: any) {
       // 错误处理和用户反馈
-      console.error(colorize("red", "错误:"), error.message);
+      console.error(colorize('red', '错误:'), error.message);
 
       // 根据错误类型提供相应的帮助信息
-      if (error.message?.includes("API key")) {
+      if (error.message?.includes('API key')) {
         console.error(
-          colorize("yellow", "提示: 请检查 .env 文件中的 API 密钥配置")
+          colorize('yellow', '提示: 请检查 .env 文件中的 API 密钥配置')
         );
-      } else if (error.message?.includes("network")) {
-        console.error(colorize("yellow", "提示: 请检查网络连接"));
-      } else if (error.message?.includes("rate limit")) {
-        console.error(colorize("yellow", "提示: 请求频率过高，请稍后重试"));
+      } else if (error.message?.includes('network')) {
+        console.error(colorize('yellow', '提示: 请检查网络连接'));
+      } else if (error.message?.includes('rate limit')) {
+        console.error(colorize('yellow', '提示: 请求频率过高，请稍后重试'));
       }
     } finally {
       // 确保始终显示下一个提示符
       rl.prompt();
     }
-  }).on("close", () => {
+  }).on('close', () => {
     // 处理程序关闭
-    console.log(colorize("yellow", "再见!"));
+    console.log(colorize('yellow', '再见!'));
     process.exit(0);
   });
 }
@@ -254,6 +291,6 @@ async function main() {
  * 启动主函数并处理未捕获的错误
  */
 main().catch((err) => {
-  console.error(colorize("red", "主函数中的未处理错误:"), err);
+  console.error(colorize('red', '主函数中的未处理错误:'), err);
   process.exit(1);
 });
