@@ -1,11 +1,11 @@
 import readline from "node:readline";
-import { InMemoryTaskStore } from "./src/lib/server/store.js";
-import { DefaultExecutionEventBusManager } from "./src/lib/server/events/execution_event_bus_manager.js";
-import { DefaultRequestHandler } from "./src/lib/server/request_handler/default_request_handler.js";
-import { AgentExecutor } from "./src/lib/server/agent_execution/agent_executor.js";
-import { AgentCard } from "./src/lib/types.js";
-import { ExecutionEventBus } from "./src/lib/server/events/execution_event_bus.js";
-import { RequestContext } from "./src/lib/server/agent_execution/request_context.js";
+import { v4 as uuidv4 } from "uuid";
+import {
+  A2AClient,
+  JSONRPCErrorResponse,
+  MessageSendParams,
+  SendMessageSuccessResponse,
+} from "./src/lib/index.js";
 
 // --- ANSI 颜色定义 ---
 /**
@@ -55,6 +55,9 @@ async function main() {
   rl.setPrompt(colorize("cyan", `You: `));
   rl.prompt();
 
+  // 创建A2AClient
+  const client = new A2AClient("http://localhost:41241");
+
   // 监听用户输入
   rl.on("line", async (line) => {
     const input = line.trim();
@@ -80,57 +83,26 @@ async function main() {
     }
 
     try {
-      const testAgentCard: AgentCard = {
-        name: "Test Agent",
-        description: "An agent for testing purposes",
-        url: "http://localhost:8080",
-        version: "1.0.0",
-        capabilities: {
-          streaming: true,
-          pushNotifications: true,
-        },
-        defaultInputModes: ["text/plain"],
-        defaultOutputModes: ["text/plain"],
-        skills: [
-          {
-            id: "test-skill",
-            name: "Test Skill",
-            description: "A skill for testing",
-            tags: ["test"],
-          },
-        ],
-      };
-
-      class TestAgentExecutor implements AgentExecutor {
-        execute: (
-          requestContext: RequestContext,
-          eventBus: ExecutionEventBus
-        ) => Promise<void>;
-        cancelTask: (
-          taskId: string,
-          eventBus: ExecutionEventBus
-        ) => Promise<void>;
-      }
-
-      const taskStore = new InMemoryTaskStore();
-      // 大多数测试的默认模拟
-      const testAgentExecutor = new TestAgentExecutor();
-      const executionEventBusManager = new DefaultExecutionEventBusManager();
-      const handler = new DefaultRequestHandler(
-        testAgentCard,
-        taskStore,
-        testAgentExecutor,
-        executionEventBusManager
-      );
-      const result = await handler.sendMessage({
+      const messageParams: MessageSendParams = {
         message: {
-          messageId: "msg-1",
+          messageId: uuidv4(),
           role: "user",
           parts: [{ kind: "text", text: input }],
           kind: "message",
         },
-      });
-      console.log(result);
+        configuration: {
+          blocking: true,
+          acceptedOutputModes: ["text/plain"],
+        },
+      };
+      const response = await client.sendMessage(messageParams);
+      if ((response as JSONRPCErrorResponse).error) {
+        throw new Error((response as JSONRPCErrorResponse).error.message);
+      }
+      console.log(
+        "A2A JS response:",
+        (response as SendMessageSuccessResponse).result
+      );
     } catch (error: any) {
       console.error(colorize("red", "错误:"), error.message);
     } finally {
