@@ -9,8 +9,8 @@
  * - 环境变量加载
  */
 
-import { deepseek, deepseekReasoner } from "../../../src/index";
-import { genkit, MessageData } from "genkit";
+import { deepseek, deepseekReasoner } from "genkitx-deepseek";
+import { genkit } from "genkit";
 import * as dotenv from "dotenv";
 import path from "path";
 
@@ -28,7 +28,7 @@ dotenv.config();
 export const ai = genkit({
   plugins: [deepseek({ apiKey: process.env.DEEPSEEK_API_KEY })],
   model: deepseekReasoner, // 使用 DeepSeek 推理模型作为默认模型
-  promptDir: path.join(__dirname, "../prompts"), // 存储提示词的目录
+  // promptDir: path.join(__dirname, "../prompts"), // 存储提示词的目录
 });
 
 // 重新导出 zod 验证库，用于定义工具输入模式
