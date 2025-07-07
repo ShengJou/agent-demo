@@ -30,7 +30,7 @@ import {
   TaskResubscriptionRequest,
   A2AError,
   SendMessageSuccessResponse,
-} from "../types.js"; // 假设schema.ts在同一目录或适当的路径
+} from '../types.js'; // 假设schema.ts在同一目录或适当的路径
 
 // 流式方法产生的数据的辅助类型
 type A2AStreamEventData =
@@ -56,7 +56,7 @@ export class A2AClient {
    * @param agentBaseUrl A2A代理的基础URL（例如，https://agent.example.com）。
    */
   constructor(agentBaseUrl: string) {
-    this.agentBaseUrl = agentBaseUrl.replace(/\/$/, ""); // 如果有的话，删除尾随斜杠
+    this.agentBaseUrl = agentBaseUrl.replace(/\/$/, ''); // 如果有的话，删除尾随斜杠
     this.agentCardPromise = this._fetchAndCacheAgentCard();
   }
 
@@ -69,14 +69,14 @@ export class A2AClient {
     const agentCardUrl = `${this.agentBaseUrl}/.well-known/agent.json`;
     try {
       const response = await fetch(agentCardUrl, {
-        headers: { Accept: "application/json" },
+        headers: { Accept: 'application/json' },
       });
       if (!response.ok) {
         throw new Error(
           `Failed to fetch Agent Card from ${agentCardUrl}: ${response.status} ${response.statusText}`
         );
       }
-      const agentCard: AgentCard = await response.json();
+      const agentCard: AgentCard = (await response.json()) as AgentCard;
       if (!agentCard.url) {
         throw new Error(
           "Fetched Agent Card does not contain a valid 'url' for the service endpoint."
@@ -85,7 +85,7 @@ export class A2AClient {
       this.serviceEndpointUrl = agentCard.url; // 从代理卡片缓存服务端点URL
       return agentCard;
     } catch (error) {
-      console.error("Error fetching or parsing Agent Card:");
+      console.error('Error fetching or parsing Agent Card:');
       // 允许promise拒绝，以便agentCardPromise的用户可以处理它。
       throw error;
     }
@@ -101,10 +101,10 @@ export class A2AClient {
    */
   public async getAgentCard(agentBaseUrl?: string): Promise<AgentCard> {
     if (agentBaseUrl) {
-      const specificAgentBaseUrl = agentBaseUrl.replace(/\/$/, "");
+      const specificAgentBaseUrl = agentBaseUrl.replace(/\/$/, '');
       const agentCardUrl = `${specificAgentBaseUrl}/.well-known/agent.json`;
       const response = await fetch(agentCardUrl, {
-        headers: { Accept: "application/json" },
+        headers: { Accept: 'application/json' },
       });
       if (!response.ok) {
         throw new Error(
@@ -131,7 +131,7 @@ export class A2AClient {
     if (!this.serviceEndpointUrl) {
       // 这种情况理想情况下应该由_fetchAndCacheAgentCard中的错误处理覆盖
       throw new Error(
-        "Agent Card URL for RPC endpoint is not available. Fetching might have failed."
+        'Agent Card URL for RPC endpoint is not available. Fetching might have failed.'
       );
     }
     return this.serviceEndpointUrl;
@@ -150,23 +150,23 @@ export class A2AClient {
     const endpoint = await this._getServiceEndpoint();
     const requestId = this.requestIdCounter++;
     const rpcRequest: JSONRPCRequest = {
-      jsonrpc: "2.0",
+      jsonrpc: '2.0',
       method,
       params: params as { [key: string]: any }, // 转换因为TParams结构因方法而异
       id: requestId,
     };
 
     const httpResponse = await fetch(endpoint, {
-      method: "POST",
+      method: 'POST',
       headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json", // 对于非流式请求期望JSON响应
+        'Content-Type': 'application/json',
+        Accept: 'application/json', // 对于非流式请求期望JSON响应
       },
       body: JSON.stringify(rpcRequest),
     });
 
     if (!httpResponse.ok) {
-      let errorBodyText = "(empty or non-JSON response)";
+      let errorBodyText = '(empty or non-JSON response)';
       try {
         errorBodyText = await httpResponse.text();
         const errorJson = JSON.parse(errorBodyText);
@@ -190,8 +190,8 @@ export class A2AClient {
         // 如果解析错误正文失败或它不是JSON-RPC错误，抛出通用HTTP错误。
         // 如果它已经是从try块内抛出的错误，重新抛出它。
         if (
-          e.message.startsWith("RPC error for") ||
-          e.message.startsWith("HTTP error for")
+          e.message.startsWith('RPC error for') ||
+          e.message.startsWith('HTTP error for')
         )
           throw e;
         throw new Error(
@@ -200,7 +200,7 @@ export class A2AClient {
       }
     }
 
-    const rpcResponse = await httpResponse.json();
+    const rpcResponse = (await httpResponse.json()) as JSONRPCResponse;
 
     if (rpcResponse.id !== requestId) {
       // 这对于请求-响应匹配是一个重大问题。
@@ -226,7 +226,7 @@ export class A2AClient {
     params: MessageSendParams
   ): Promise<SendMessageResponse> {
     return this._postRpcRequest<MessageSendParams, SendMessageResponse>(
-      "message/send",
+      'message/send',
       params
     );
   }
@@ -246,7 +246,7 @@ export class A2AClient {
     const agentCard = await this.agentCardPromise; // 确保获取代理卡片
     if (!agentCard.capabilities?.streaming) {
       throw new Error(
-        "Agent does not support streaming (AgentCard.capabilities.streaming is not true)."
+        'Agent does not support streaming (AgentCard.capabilities.streaming is not true).'
       );
     }
 
@@ -254,24 +254,24 @@ export class A2AClient {
     const clientRequestId = this.requestIdCounter++; // 为此流请求使用唯一ID
     const rpcRequest: JSONRPCRequest = {
       // 这是建立流的初始JSON-RPC请求
-      jsonrpc: "2.0",
-      method: "message/stream",
+      jsonrpc: '2.0',
+      method: 'message/stream',
       params: params as { [key: string]: any },
       id: clientRequestId,
     };
 
     const response = await fetch(endpoint, {
-      method: "POST",
+      method: 'POST',
       headers: {
-        "Content-Type": "application/json",
-        Accept: "text/event-stream", // 对SSE至关重要
+        'Content-Type': 'application/json',
+        Accept: 'text/event-stream', // 对SSE至关重要
       },
       body: JSON.stringify(rpcRequest),
     });
 
     if (!response.ok) {
       // 尝试读取错误正文以获取更多详细信息
-      let errorBody = "";
+      let errorBody = '';
       try {
         errorBody = await response.text();
         const errorJson = JSON.parse(errorBody);
@@ -281,12 +281,12 @@ export class A2AClient {
           );
         }
       } catch (e: any) {
-        if (e.message.startsWith("HTTP error establishing stream")) throw e;
+        if (e.message.startsWith('HTTP error establishing stream')) throw e;
         // 如果正文不是JSON或解析失败的回退
         throw new Error(
           `HTTP error establishing stream for message/stream: ${
             response.status
-          } ${response.statusText}. Response: ${errorBody || "(empty)"}`
+          } ${response.statusText}. Response: ${errorBody || '(empty)'}`
         );
       }
       throw new Error(
@@ -294,7 +294,7 @@ export class A2AClient {
       );
     }
     if (
-      !response.headers.get("Content-Type")?.startsWith("text/event-stream")
+      !response.headers.get('Content-Type')?.startsWith('text/event-stream')
     ) {
       // 服务器应明确设置此内容类型用于SSE。
       throw new Error(
@@ -322,14 +322,14 @@ export class A2AClient {
     const agentCard = await this.agentCardPromise;
     if (!agentCard.capabilities?.pushNotifications) {
       throw new Error(
-        "Agent does not support push notifications (AgentCard.capabilities.pushNotifications is not true)."
+        'Agent does not support push notifications (AgentCard.capabilities.pushNotifications is not true).'
       );
     }
     // 'params' 直接匹配RPC方法期望的结构。
     return this._postRpcRequest<
       TaskPushNotificationConfig,
       SetTaskPushNotificationConfigResponse
-    >("tasks/pushNotificationConfig/set", params);
+    >('tasks/pushNotificationConfig/set', params);
   }
 
   /**
@@ -344,7 +344,7 @@ export class A2AClient {
     return this._postRpcRequest<
       TaskIdParams,
       GetTaskPushNotificationConfigResponse
-    >("tasks/pushNotificationConfig/get", params);
+    >('tasks/pushNotificationConfig/get', params);
   }
 
   /**
@@ -354,7 +354,7 @@ export class A2AClient {
    */
   public async getTask(params: TaskQueryParams): Promise<GetTaskResponse> {
     return this._postRpcRequest<TaskQueryParams, GetTaskResponse>(
-      "tasks/get",
+      'tasks/get',
       params
     );
   }
@@ -366,7 +366,7 @@ export class A2AClient {
    */
   public async cancelTask(params: TaskIdParams): Promise<CancelTaskResponse> {
     return this._postRpcRequest<TaskIdParams, CancelTaskResponse>(
-      "tasks/cancel",
+      'tasks/cancel',
       params
     );
   }
@@ -384,7 +384,7 @@ export class A2AClient {
     const agentCard = await this.agentCardPromise;
     if (!agentCard.capabilities?.streaming) {
       throw new Error(
-        "Agent does not support streaming (required for tasks/resubscribe)."
+        'Agent does not support streaming (required for tasks/resubscribe).'
       );
     }
 
@@ -392,23 +392,23 @@ export class A2AClient {
     const clientRequestId = this.requestIdCounter++; // 此重新订阅请求的唯一ID
     const rpcRequest: JSONRPCRequest = {
       // 建立流的初始JSON-RPC请求
-      jsonrpc: "2.0",
-      method: "tasks/resubscribe",
+      jsonrpc: '2.0',
+      method: 'tasks/resubscribe',
       params: params as { [key: string]: any },
       id: clientRequestId,
     };
 
     const response = await fetch(endpoint, {
-      method: "POST",
+      method: 'POST',
       headers: {
-        "Content-Type": "application/json",
-        Accept: "text/event-stream",
+        'Content-Type': 'application/json',
+        Accept: 'text/event-stream',
       },
       body: JSON.stringify(rpcRequest),
     });
 
     if (!response.ok) {
-      let errorBody = "";
+      let errorBody = '';
       try {
         errorBody = await response.text();
         const errorJson = JSON.parse(errorBody);
@@ -418,11 +418,11 @@ export class A2AClient {
           );
         }
       } catch (e: any) {
-        if (e.message.startsWith("HTTP error establishing stream")) throw e;
+        if (e.message.startsWith('HTTP error establishing stream')) throw e;
         throw new Error(
           `HTTP error establishing stream for tasks/resubscribe: ${
             response.status
-          } ${response.statusText}. Response: ${errorBody || "(empty)"}`
+          } ${response.statusText}. Response: ${errorBody || '(empty)'}`
         );
       }
       throw new Error(
@@ -430,7 +430,7 @@ export class A2AClient {
       );
     }
     if (
-      !response.headers.get("Content-Type")?.startsWith("text/event-stream")
+      !response.headers.get('Content-Type')?.startsWith('text/event-stream')
     ) {
       throw new Error(
         "Invalid response Content-Type for SSE stream on resubscribe. Expected 'text/event-stream'."
@@ -459,13 +459,13 @@ export class A2AClient {
     originalRequestId: number | string | null
   ): AsyncGenerator<TStreamItem, void, undefined> {
     if (!response.body) {
-      throw new Error("SSE response body is undefined. Cannot read stream.");
+      throw new Error('SSE response body is undefined. Cannot read stream.');
     }
     const reader = response.body
       .pipeThrough(new TextDecoderStream())
       .getReader();
-    let buffer = ""; // 保存来自流的不完整行
-    let eventDataBuffer = ""; // 保存当前事件累积的'data:'行
+    let buffer = ''; // 保存来自流的不完整行
+    let eventDataBuffer = ''; // 保存当前事件累积的'data:'行
 
     try {
       while (true) {
@@ -485,11 +485,11 @@ export class A2AClient {
         buffer += value; // 将新块追加到缓冲区
         let lineEndIndex;
         // 处理缓冲区中的所有完整行
-        while ((lineEndIndex = buffer.indexOf("\n")) >= 0) {
+        while ((lineEndIndex = buffer.indexOf('\n')) >= 0) {
           const line = buffer.substring(0, lineEndIndex).trim(); // 获取并修剪行
           buffer = buffer.substring(lineEndIndex + 1); // 从缓冲区中删除已处理的行
 
-          if (line === "") {
+          if (line === '') {
             // 空行：表示事件的结束
             if (eventDataBuffer) {
               // 如果我们为事件累积了数据
@@ -498,13 +498,13 @@ export class A2AClient {
                 originalRequestId
               );
               yield result;
-              eventDataBuffer = ""; // 为下一个事件重置缓冲区
+              eventDataBuffer = ''; // 为下一个事件重置缓冲区
             }
-          } else if (line.startsWith("data:")) {
-            eventDataBuffer += line.substring(5).trimStart() + "\n"; // 追加数据（多行数据是可能的）
-          } else if (line.startsWith(":")) {
+          } else if (line.startsWith('data:')) {
+            eventDataBuffer += line.substring(5).trimStart() + '\n'; // 追加数据（多行数据是可能的）
+          } else if (line.startsWith(':')) {
             // 这是SSE中的注释行，忽略它。
-          } else if (line.includes(":")) {
+          } else if (line.includes(':')) {
             // 其他SSE字段，如'event:'、'id:'、'retry:'。
             // A2A规范主要关注JSON-RPC负载的'data'字段。
             // 现在，我们不专门处理这些其他SSE字段，除非规范要求。
@@ -513,7 +513,7 @@ export class A2AClient {
       }
     } catch (error: any) {
       // 记录并重新抛出流处理过程中遇到的错误
-      console.error("Error reading or parsing SSE stream:", error.message);
+      console.error('Error reading or parsing SSE stream:', error.message);
       throw error;
     } finally {
       reader.releaseLock(); // 确保释放读取器锁
@@ -532,11 +532,11 @@ export class A2AClient {
     originalRequestId: number | string | null
   ): TStreamItem {
     if (!jsonData.trim()) {
-      throw new Error("Attempted to process empty SSE event data.");
+      throw new Error('Attempted to process empty SSE event data.');
     }
     try {
       // SSE数据可以是多行的，确保它被视为单个JSON字符串。
-      const sseJsonRpcResponse = JSON.parse(jsonData.replace(/\n$/, "")); // 如果有的话，删除尾随换行符
+      const sseJsonRpcResponse = JSON.parse(jsonData.replace(/\n$/, '')); // 如果有的话，删除尾随换行符
 
       // 类型断言为SendStreamingMessageResponse，因为这是A2A流的预期结构。
       const a2aStreamResponse: SendStreamingMessageResponse =
@@ -562,9 +562,9 @@ export class A2AClient {
 
       // 检查'result'是否存在，因为它对于成功的JSON-RPC响应是必需的
       if (
-        !("result" in a2aStreamResponse) ||
+        !('result' in a2aStreamResponse) ||
         typeof (a2aStreamResponse as SendStreamingMessageSuccessResponse)
-          .result === "undefined"
+          .result === 'undefined'
       ) {
         throw new Error(
           `SSE event JSON-RPC response is missing 'result' field. Data: ${jsonData}`
@@ -577,7 +577,7 @@ export class A2AClient {
     } catch (e: any) {
       // 捕获来自JSON.parse的错误或是否是此函数抛出的错误响应
       if (
-        e.message.startsWith("SSE event contained an error") ||
+        e.message.startsWith('SSE event contained an error') ||
         e.message.startsWith(
           "SSE event JSON-RPC response is missing 'result' field"
         )
@@ -586,7 +586,7 @@ export class A2AClient {
       }
       // 对于其他解析错误或意外结构：
       console.error(
-        "Failed to parse SSE event data string or unexpected JSON-RPC structure:",
+        'Failed to parse SSE event data string or unexpected JSON-RPC structure:',
         jsonData,
         e
       );
@@ -605,6 +605,6 @@ export class A2AClient {
    * @returns 如果是错误响应则为true
    */
   isErrorResponse(response: JSONRPCResponse): response is JSONRPCErrorResponse {
-    return "error" in response;
+    return 'error' in response;
   }
 }

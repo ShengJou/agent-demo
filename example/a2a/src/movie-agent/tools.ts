@@ -18,8 +18,8 @@
  * 使用前需要设置环境变量：TMDB_API_KEY
  */
 
-import { ai, z } from './genkit';
-import { callTmdbApi } from './tmdb';
+import { ai, z } from './genkit.js';
+import { callTmdbApi } from './tmdb.js';
 
 /**
  * TMDB API 响应的通用结构

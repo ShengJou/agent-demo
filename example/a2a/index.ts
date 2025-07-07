@@ -1,11 +1,15 @@
-import readline from "node:readline";
-import { v4 as uuidv4 } from "uuid";
+import readline from 'node:readline';
+import { v4 as uuidv4 } from 'uuid';
+import * as dotenv from 'dotenv';
 import {
   A2AClient,
   JSONRPCErrorResponse,
   MessageSendParams,
   SendMessageSuccessResponse,
-} from "./src/lib/index.js";
+} from './src/lib/index.js';
+
+// 加载环境变量配置
+dotenv.config();
 
 // --- ANSI 颜色定义 ---
 /**
@@ -13,13 +17,13 @@ import {
  * 用于美化输出，提供更好的用户体验
  */
 const colors = {
-  reset: "\x1b[0m", // 重置颜色
-  green: "\x1b[32m", // 绿色
-  yellow: "\x1b[33m", // 黄色
-  blue: "\x1b[34m", // 蓝色
-  cyan: "\x1b[36m", // 青色
-  red: "\x1b[31m", // 红色
-  dim: "\x1b[2m", // 暗淡
+  reset: '\x1b[0m', // 重置颜色
+  green: '\x1b[32m', // 绿色
+  yellow: '\x1b[33m', // 黄色
+  blue: '\x1b[34m', // 蓝色
+  cyan: '\x1b[36m', // 青色
+  red: '\x1b[31m', // 红色
+  dim: '\x1b[2m', // 暗淡
 };
 
 /**
@@ -40,7 +44,7 @@ function colorize(color: keyof typeof colors, text: string): string {
 const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout,
-  prompt: colorize("cyan", "You: "),
+  prompt: colorize('cyan', 'You: '),
 });
 
 // --- 主循环 ---
@@ -49,17 +53,17 @@ const rl = readline.createInterface({
  */
 async function main() {
   // 显示欢迎信息
-  console.log(colorize("blue", `🤖 DeepSeek Agent`));
-  console.log(colorize("dim", `输入 /help 获取帮助，/exit 退出\n`));
+  console.log(colorize('blue', `🤖 DeepSeek Agent`));
+  console.log(colorize('dim', `输入 /help 获取帮助，/exit 退出\n`));
 
-  rl.setPrompt(colorize("cyan", `You: `));
+  rl.setPrompt(colorize('cyan', `You: `));
   rl.prompt();
 
   // 创建A2AClient
-  const client = new A2AClient("http://localhost:41241");
+  const client = new A2AClient('http://localhost:41241');
 
   // 监听用户输入
-  rl.on("line", async (line) => {
+  rl.on('line', async (line) => {
     const input = line.trim();
 
     // 跳过空输入
@@ -69,15 +73,15 @@ async function main() {
     }
 
     // 处理系统命令
-    if (input.toLowerCase() === "/help") {
-      console.log(colorize("blue", "\n命令:"));
-      console.log(colorize("dim", "  /exit - 退出\n"));
+    if (input.toLowerCase() === '/help') {
+      console.log(colorize('blue', '\n命令:'));
+      console.log(colorize('dim', '  /exit - 退出\n'));
       rl.prompt();
       return;
     }
 
-    if (input.toLowerCase() === "/exit") {
-      console.log(colorize("yellow", "再见!"));
+    if (input.toLowerCase() === '/exit') {
+      console.log(colorize('yellow', '再见!'));
       rl.close();
       return;
     }
@@ -86,13 +90,13 @@ async function main() {
       const messageParams: MessageSendParams = {
         message: {
           messageId: uuidv4(),
-          role: "user",
-          parts: [{ kind: "text", text: input }],
-          kind: "message",
+          role: 'user',
+          parts: [{ kind: 'text', text: input }],
+          kind: 'message',
         },
         configuration: {
           blocking: true,
-          acceptedOutputModes: ["text/plain"],
+          acceptedOutputModes: ['text/plain'],
         },
       };
       const response = await client.sendMessage(messageParams);
@@ -100,18 +104,18 @@ async function main() {
         throw new Error((response as JSONRPCErrorResponse).error.message);
       }
       console.log(
-        "A2A JS response:",
+        'A2A JS response:',
         (response as SendMessageSuccessResponse).result
       );
     } catch (error: any) {
-      console.error(colorize("red", "错误:"), error.message);
+      console.error(colorize('red', '错误:'), error.message);
     } finally {
       // 确保始终显示下一个提示符
       rl.prompt();
     }
-  }).on("close", () => {
+  }).on('close', () => {
     // 处理程序关闭
-    console.log(colorize("yellow", "再见!"));
+    console.log(colorize('yellow', '再见!'));
     process.exit(0);
   });
 }
@@ -121,6 +125,6 @@ async function main() {
  * 启动主函数并处理未捕获的错误
  */
 main().catch((err) => {
-  console.error(colorize("red", "主函数中的未处理错误:"), err);
+  console.error(colorize('red', '主函数中的未处理错误:'), err);
   process.exit(1);
 });

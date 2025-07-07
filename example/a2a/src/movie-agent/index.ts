@@ -1,5 +1,5 @@
-import express from "express";
-import { v4 as uuidv4 } from "uuid"; // 用于生成唯一ID
+import express from 'express';
+import { v4 as uuidv4 } from 'uuid'; // 用于生成唯一ID
 
 import {
   InMemoryTaskStore,
@@ -15,13 +15,17 @@ import {
   TaskStatusUpdateEvent,
   TextPart,
   Message,
-} from "../lib/index.js";
-import { MessageData } from "genkit";
-import { ai } from "./genkit.js";
-import { searchMovies, searchPeople } from "./tools.js";
+} from '../lib/index.js';
+import { MessageData } from 'genkit';
+import { ai } from './genkit.js';
+import { searchMovies, searchPeople } from './tools.js';
+import * as dotenv from 'dotenv';
+
+// 加载环境变量配置
+dotenv.config();
 
 if (!process.env.DEEPSEEK_API_KEY || !process.env.TMDB_API_KEY) {
-  console.error("需要 DEEPSEEK_API_KEY 和 TMDB_API_KEY 环境变量");
+  console.error('需要 DEEPSEEK_API_KEY 和 TMDB_API_KEY 环境变量');
   process.exit(1);
 }
 
@@ -29,7 +33,7 @@ if (!process.env.DEEPSEEK_API_KEY || !process.env.TMDB_API_KEY) {
 const contexts: Map<string, Message[]> = new Map();
 
 // 加载Genkit提示
-const movieAgentPrompt = ai.prompt("movie_agent");
+const movieAgentPrompt = ai.prompt('movie_agent');
 
 /**
  * MovieAgentExecutor实现代理的核心逻辑。
@@ -63,11 +67,11 @@ class MovieAgentExecutor implements AgentExecutor {
     // 1. 如果是新任务，发布初始Task事件
     if (!existingTask) {
       const initialTask: Task = {
-        kind: "task",
+        kind: 'task',
         id: taskId,
         contextId: contextId,
         status: {
-          state: "submitted",
+          state: 'submitted',
           timestamp: new Date().toISOString(),
         },
         history: [userMessage], // 使用当前用户消息开始历史记录
@@ -78,17 +82,17 @@ class MovieAgentExecutor implements AgentExecutor {
 
     // 2. 发布"工作中"状态更新
     const workingStatusUpdate: TaskStatusUpdateEvent = {
-      kind: "status-update",
+      kind: 'status-update',
       taskId: taskId,
       contextId: contextId,
       status: {
-        state: "working",
+        state: 'working',
         message: {
-          kind: "message",
-          role: "agent",
+          kind: 'message',
+          role: 'agent',
           messageId: uuidv4(),
           parts: [
-            { kind: "text", text: "Processing your question, hang tight!" },
+            { kind: 'text', text: 'Processing your question, hang tight!' },
           ],
           taskId: taskId,
           contextId: contextId,
@@ -108,10 +112,10 @@ class MovieAgentExecutor implements AgentExecutor {
 
     const messages: MessageData[] = historyForGenkit
       .map((m) => ({
-        role: (m.role === "agent" ? "model" : "user") as "user" | "model",
+        role: (m.role === 'agent' ? 'model' : 'user') as 'user' | 'model',
         content: m.parts
           .filter(
-            (p): p is TextPart => p.kind === "text" && !!(p as TextPart).text
+            (p): p is TextPart => p.kind === 'text' && !!(p as TextPart).text
           )
           .map((p) => ({
             text: (p as TextPart).text,
@@ -124,16 +128,16 @@ class MovieAgentExecutor implements AgentExecutor {
         `[MovieAgentExecutor] No valid text messages found in history for task ${taskId}.`
       );
       const failureUpdate: TaskStatusUpdateEvent = {
-        kind: "status-update",
+        kind: 'status-update',
         taskId: taskId,
         contextId: contextId,
         status: {
-          state: "failed",
+          state: 'failed',
           message: {
-            kind: "message",
-            role: "agent",
+            kind: 'message',
+            role: 'agent',
             messageId: uuidv4(),
-            parts: [{ kind: "text", text: "No message found to process." }],
+            parts: [{ kind: 'text', text: 'No message found to process.' }],
             taskId: taskId,
             contextId: contextId,
           },
@@ -166,11 +170,11 @@ class MovieAgentExecutor implements AgentExecutor {
         );
 
         const cancelledUpdate: TaskStatusUpdateEvent = {
-          kind: "status-update",
+          kind: 'status-update',
           taskId: taskId,
           contextId: contextId,
           status: {
-            state: "canceled",
+            state: 'canceled',
             timestamp: new Date().toISOString(),
           },
           final: true, // 取消是最终状态
@@ -181,32 +185,32 @@ class MovieAgentExecutor implements AgentExecutor {
 
       const responseText = response.text; // 使用.text()访问text属性
       console.info(`[MovieAgentExecutor] Prompt response: ${responseText}`);
-      const lines = responseText.trim().split("\n");
+      const lines = responseText.trim().split('\n');
       const finalStateLine = lines.at(-1)?.trim().toUpperCase();
       const agentReplyText = lines
         .slice(0, lines.length - 1)
-        .join("\n")
+        .join('\n')
         .trim();
 
-      let finalA2AState: TaskState = "unknown";
+      let finalA2AState: TaskState = 'unknown';
 
-      if (finalStateLine === "COMPLETED") {
-        finalA2AState = "completed";
-      } else if (finalStateLine === "AWAITING_USER_INPUT") {
-        finalA2AState = "input-required";
+      if (finalStateLine === 'COMPLETED') {
+        finalA2AState = 'completed';
+      } else if (finalStateLine === 'AWAITING_USER_INPUT') {
+        finalA2AState = 'input-required';
       } else {
         console.warn(
           `[MovieAgentExecutor] Unexpected final state line from prompt: ${finalStateLine}. Defaulting to 'completed'.`
         );
-        finalA2AState = "completed"; // 如果LLM偏离则默认
+        finalA2AState = 'completed'; // 如果LLM偏离则默认
       }
 
       // 5. 发布最终任务状态更新
       const agentMessage: Message = {
-        kind: "message",
-        role: "agent",
+        kind: 'message',
+        role: 'agent',
         messageId: uuidv4(),
-        parts: [{ kind: "text", text: agentReplyText || "Completed." }], // 确保有一些文本
+        parts: [{ kind: 'text', text: agentReplyText || 'Completed.' }], // 确保有一些文本
         taskId: taskId,
         contextId: contextId,
       };
@@ -214,7 +218,7 @@ class MovieAgentExecutor implements AgentExecutor {
       contexts.set(contextId, historyForGenkit);
 
       const finalUpdate: TaskStatusUpdateEvent = {
-        kind: "status-update",
+        kind: 'status-update',
         taskId: taskId,
         contextId: contextId,
         status: {
@@ -235,16 +239,16 @@ class MovieAgentExecutor implements AgentExecutor {
         error
       );
       const errorUpdate: TaskStatusUpdateEvent = {
-        kind: "status-update",
+        kind: 'status-update',
         taskId: taskId,
         contextId: contextId,
         status: {
-          state: "failed",
+          state: 'failed',
           message: {
-            kind: "message",
-            role: "agent",
+            kind: 'message',
+            role: 'agent',
             messageId: uuidv4(),
-            parts: [{ kind: "text", text: `Agent error: ${error.message}` }],
+            parts: [{ kind: 'text', text: `Agent error: ${error.message}` }],
             taskId: taskId,
             contextId: contextId,
           },
@@ -259,15 +263,15 @@ class MovieAgentExecutor implements AgentExecutor {
 
 // --- 服务器设置 ---
 const movieAgentCard: AgentCard = {
-  name: "电影助手",
-  description: "一个可以使用TMDB回答关于电影和演员问题的智能助手。",
+  name: '电影助手',
+  description: '一个可以使用TMDB回答关于电影和演员问题的智能助手。',
   // 根据需要调整基础URL和端口。/a2a是A2AExpressApp中的默认基础
-  url: "http://localhost:41241/", // 示例：如果A2AExpressApp中的baseUrl
+  url: 'http://localhost:41241/', // 示例：如果A2AExpressApp中的baseUrl
   provider: {
-    organization: "A2A 示例",
-    url: "https://example.com/a2a-samples", // 添加提供者URL
+    organization: 'A2A 示例',
+    url: 'https://example.com/a2a-samples', // 添加提供者URL
   },
-  version: "0.0.2", // 递增版本
+  version: '0.0.2', // 递增版本
   capabilities: {
     streaming: true, // 新框架支持流式传输
     pushNotifications: false, // 假设此代理尚未实现
@@ -276,24 +280,24 @@ const movieAgentCard: AgentCard = {
   // authentication: null, // Property 'authentication' does not exist on type 'AgentCard'.
   securitySchemes: undefined, // 或者如果有的话定义实际的安全方案
   security: undefined,
-  defaultInputModes: ["text"],
-  defaultOutputModes: ["text", "task-status"], // task-status是常见的输出模式
+  defaultInputModes: ['text'],
+  defaultOutputModes: ['text', 'task-status'], // task-status是常见的输出模式
   skills: [
     {
-      id: "general_movie_chat",
-      name: "电影聊天助手",
-      description: "回答关于电影、演员、导演的一般问题或进行聊天。",
-      tags: ["电影", "演员", "导演"],
+      id: 'general_movie_chat',
+      name: '电影聊天助手',
+      description: '回答关于电影、演员、导演的一般问题或进行聊天。',
+      tags: ['电影', '演员', '导演'],
       examples: [
-        "告诉我《盗梦空间》的剧情。",
-        "推荐一部好看的科幻电影。",
-        "《黑客帝国》是谁导演的？",
-        "斯嘉丽·约翰逊还演过哪些电影？",
-        "找一些基努·里维斯主演的动作电影",
-        "《侏罗纪公园》和《终结者2》哪个先上映？",
+        '告诉我《盗梦空间》的剧情。',
+        '推荐一部好看的科幻电影。',
+        '《黑客帝国》是谁导演的？',
+        '斯嘉丽·约翰逊还演过哪些电影？',
+        '找一些基努·里维斯主演的动作电影',
+        '《侏罗纪公园》和《终结者2》哪个先上映？',
       ],
-      inputModes: ["text"], // 为技能明确定义
-      outputModes: ["text", "task-status"], // 为技能明确定义
+      inputModes: ['text'], // 为技能明确定义
+      outputModes: ['text', 'task-status'], // 为技能明确定义
     },
   ],
   supportsAuthenticatedExtendedCard: false,
@@ -326,7 +330,7 @@ async function main() {
     console.log(
       `[MovieAgent] Agent Card: http://localhost:${PORT}/.well-known/agent.json`
     );
-    console.log("[MovieAgent] Press Ctrl+C to stop the server");
+    console.log('[MovieAgent] Press Ctrl+C to stop the server');
   });
 }
 
