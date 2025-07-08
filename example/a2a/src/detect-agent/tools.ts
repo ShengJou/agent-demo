@@ -19,11 +19,15 @@
  */
 
 import { ai, z } from "./genkit.js";
-import {
-  detect_objects_on_image,
-  detect_and_draw,
-  yolo_classes,
-} from "./detect.js";
+import { detect_and_draw, yolo_classes } from "./detect.js";
+import * as fs from "fs";
+import * as path from "path";
+import { fileURLToPath } from "url";
+import { dirname } from "path";
+
+// 获取当前文件的目录路径
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 /**
  * 检测结果接口定义
@@ -115,7 +119,11 @@ export const detectObjects = ai.defineTool(
     name: "detectObjects",
     description: "对图像进行物体检测，识别图像中的各种物体并返回其位置和类别",
     inputSchema: z.object({
-      imageData: z.string().describe("图像的base64编码数据或图像文件路径"),
+      imageUrl: z
+        .string()
+        .describe(
+          "图像URL，支持HTTP/HTTPS URL、file://本地文件、data:base64数据、相对路径或绝对路径"
+        ),
       includeDetails: z
         .boolean()
         .optional()
@@ -126,64 +134,62 @@ export const detectObjects = ai.defineTool(
         .describe("是否在图像上绘制边界框，默认为false"),
     }),
   },
-  async ({ imageData, includeDetails = true, drawBoundingBoxes = false }) => {
+  async ({ imageUrl, includeDetails = true, drawBoundingBoxes = true }) => {
     console.log("\n正在调用[detect:detectObjects]，开始物体检测分析...\n");
+    console.log(`图像URL: ${imageUrl}`);
 
     try {
-      let imageBuffer: Buffer;
+      // 调用detect_and_draw方法获取检测结果
+      const result = await detect_and_draw(imageUrl);
+      const { boxes, drawnImage, originalImage } = result;
 
-      // 处理不同格式的图像输入
-      if (imageData.startsWith("data:image/")) {
-        // 处理base64编码的图像数据
-        const base64Data = imageData.split(",")[1];
-        imageBuffer = Buffer.from(base64Data, "base64");
-      } else if (imageData.startsWith("/") || imageData.includes("://")) {
-        // 处理文件路径或URL（这里需要根据实际需求实现）
-        throw new Error("暂不支持文件路径或URL，请使用base64编码的图像数据");
-      } else {
-        // 假设是纯base64数据
-        imageBuffer = Buffer.from(imageData, "base64");
-      }
-
-      console.log("正在运行YOLOv8模型进行物体检测...");
-
-      let detections: any[];
-      let drawnImageBuffer: Buffer | null = null;
-
-      if (drawBoundingBoxes) {
-        // 使用检测和绘制功能
-        const result = await detect_and_draw(imageBuffer);
-        detections = result.boxes;
-        drawnImageBuffer = result.drawnImage;
-      } else {
-        // 只进行检测
-        detections = await detect_objects_on_image(imageBuffer);
-      }
-
-      console.log(`检测完成！发现 ${detections.length} 个物体`);
+      console.log(`检测完成！发现 ${boxes.length} 个物体`);
 
       // 格式化检测结果
-      let formattedResult = formatDetectionResults(detections);
+      let formattedResult = formatDetectionResults(boxes);
 
-      // 如果绘制了边界框，添加图像信息
-      if (drawBoundingBoxes && drawnImageBuffer) {
-        const drawnImageBase64 = drawnImageBuffer.toString("base64");
+      // 如果需要绘制边界框，返回带边界框的图像
+      if (drawBoundingBoxes) {
+        const drawnImageBase64 = drawnImage.toString("base64");
         const drawnImageDataUrl = `data:image/png;base64,${drawnImageBase64}`;
+
+        // 保存图片到assets/images目录
+        const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+        const filename = `detection-result-${timestamp}.png`;
+        const projectRoot = path.resolve(__dirname, "../../../");
+        const outputDir = path.join(projectRoot, "assets/images");
+        const outputPath = path.join(outputDir, filename);
+
+        try {
+          // 确保目录存在
+          fs.mkdirSync(outputDir, { recursive: true });
+
+          // 从base64解码并保存图片
+          const imageData = drawnImageBase64;
+          const buffer = Buffer.from(imageData, "base64");
+          fs.writeFileSync(outputPath, buffer);
+
+          console.log(`图片已保存到: ${outputPath}`);
+        } catch (saveError) {
+          console.error("保存图片失败:", saveError);
+        }
+
         formattedResult += `\n\n📸 已生成带边界框的图像：
 - 图像格式: PNG
 - 图像尺寸: 已标注所有检测到的物体
 - 边界框颜色: 绿色 (#00ff00)
 - 包含置信度和类别标签
+- 保存路径: ${outputPath}
 
 图像数据: ${drawnImageDataUrl}`;
       }
 
       // 如果需要详细信息，添加技术细节
-      if (includeDetails && detections.length > 0) {
-        const maxConfidence = Math.max(...detections.map((d) => d[5]));
-        const minConfidence = Math.min(...detections.map((d) => d[5]));
+      if (includeDetails && boxes.length > 0) {
+        const maxConfidence = Math.max(...boxes.map((d) => d[5]));
+        const minConfidence = Math.min(...boxes.map((d) => d[5]));
         const avgConfidence =
-          detections.reduce((sum, d) => sum + d[5], 0) / detections.length;
+          boxes.reduce((sum, d) => sum + d[5], 0) / boxes.length;
 
         const technicalInfo = `\n技术分析信息：
 - 检测模型: YOLOv8 (Medium)

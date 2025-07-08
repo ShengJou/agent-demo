@@ -1,4 +1,4 @@
-import { deepseek, deepseekReasoner } from "../../../../src/index.js";
+import { deepseek, deepseekReasoner } from "../../../../dist/index.js";
 import { genkit } from "genkit";
 import { dirname } from "path";
 import { fileURLToPath } from "url";

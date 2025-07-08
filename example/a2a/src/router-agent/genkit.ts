@@ -2,7 +2,7 @@
  * Router Agent 的 Genkit 配置
  */
 
-import { deepseek, deepseekReasoner } from "../../../../src/index.js";
+import { deepseek, deepseekReasoner } from "genkitx-deepseek";
 import { genkit, z } from "genkit";
 import { dirname } from "path";
 import { fileURLToPath } from "url";

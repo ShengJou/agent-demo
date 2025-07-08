@@ -1,5 +1,13 @@
 import ort from "onnxruntime-node";
 import sharp from "sharp";
+import * as fs from "fs";
+import * as path from "path";
+import { fileURLToPath } from "url";
+import { dirname } from "path";
+
+// 获取当前文件的目录路径
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 /**
  * YOLOv8类别标签数组
@@ -120,7 +128,8 @@ async function prepare_input(buf) {
  * @returns 神经网络的原始输出，作为数字的平面数组
  */
 async function run_model(input) {
-  const model = await ort.InferenceSession.create("yolov8m.onnx");
+  const modelPath = path.join(__dirname, "yolov8m.onnx");
+  const model = await ort.InferenceSession.create(modelPath);
   input = new ort.Tensor(Float32Array.from(input), [1, 3, 640, 640]);
   const outputs = await model.run({ images: input });
   return outputs["output0"].data;
@@ -357,16 +366,97 @@ export async function draw_image_and_boxes(
 }
 
 /**
+ * 根据URL类型读取文件buffer
+ * 支持 HTTP/HTTPS、file://、data: (base64) 等格式
+ * @param url 文件URL
+ * @returns Promise<ArrayBuffer>
+ */
+export async function fetchImage(url: string): Promise<ArrayBuffer> {
+  try {
+    // 处理 HTTP/HTTPS URL
+    if (url.startsWith("http://") || url.startsWith("https://")) {
+      console.log(`正在获取网络文件: ${url}`);
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(
+          `网络请求失败: ${response.status} ${response.statusText}`
+        );
+      }
+      return await response.arrayBuffer();
+    }
+
+    // 处理 file:// URL
+    if (url.startsWith("file://")) {
+      console.log(`正在读取本地文件: ${url}`);
+      const filePath = url.replace("file://", "");
+      const resolvedPath = path.resolve(filePath);
+
+      // 检查文件是否存在
+      if (!fs.existsSync(resolvedPath)) {
+        throw new Error(`文件不存在: ${resolvedPath}`);
+      }
+
+      const buffer = fs.readFileSync(resolvedPath);
+      return buffer.buffer.slice(
+        buffer.byteOffset,
+        buffer.byteOffset + buffer.byteLength
+      );
+    }
+
+    // 处理 data: URL (base64)
+    if (url.startsWith("data:")) {
+      console.log(`正在解析base64数据: ${url.substring(0, 50)}...`);
+      const base64Data = url.split(",")[1];
+      if (!base64Data) {
+        throw new Error("无效的data URL格式");
+      }
+
+      const buffer = Buffer.from(base64Data, "base64");
+      return buffer.buffer.slice(
+        buffer.byteOffset,
+        buffer.byteOffset + buffer.byteLength
+      );
+    }
+
+    // 处理相对路径或绝对路径 (当作本地文件)
+    if (!url.includes("://")) {
+      console.log(`正在读取本地文件: ${url}`);
+      const resolvedPath = path.resolve(url);
+
+      // 检查文件是否存在
+      if (!fs.existsSync(resolvedPath)) {
+        throw new Error(`文件不存在: ${resolvedPath}`);
+      }
+
+      const buffer = fs.readFileSync(resolvedPath);
+      return buffer.buffer.slice(
+        buffer.byteOffset,
+        buffer.byteOffset + buffer.byteLength
+      );
+    }
+
+    // 不支持的URL类型
+    throw new Error(`不支持的URL类型: ${url}`);
+  } catch (error) {
+    console.error(`获取图像失败: ${error.message}`);
+    throw error;
+  }
+}
+
+/**
  * 检测物体并绘制边界框
  * @param imageBuffer 输入图像数据
  * @param drawOptions 绘制选项
  * @returns 包含检测结果和绘制图像的对象
  */
 export async function detect_and_draw(
-  imageBuffer: Buffer,
+  imageUrl: string,
   drawOptions: DrawOptions = {}
 ) {
   try {
+    const imageArrayBuffer = await fetchImage(imageUrl);
+    const imageBuffer = Buffer.from(imageArrayBuffer);
+
     // 执行物体检测
     const boxes = await detect_objects_on_image(imageBuffer);
 
