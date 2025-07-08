@@ -47,7 +47,7 @@ function generateId(): string {
 // --- 状态 ---
 let currentTaskId: string | undefined = undefined; // 初始化为undefined
 let currentContextId: string | undefined = undefined; // 初始化为undefined
-const serverUrl = process.argv[2] || "http://localhost:41241"; // 代理的基础URL
+const serverUrl = process.argv[2] || "http://localhost:41240"; // 代理的基础URL
 const client = new A2AClient(serverUrl);
 let agentName = "Agent"; // 默认值，稍后尝试从代理卡片获取
 

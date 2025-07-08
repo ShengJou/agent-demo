@@ -11,7 +11,9 @@
   "scripts": {
     "build": "tsc",
     "start:movie-agent": "npx tsx src/movie-agent/index.ts",
-    "start:client": "npx tsx index.ts",
+    "start:detect-agent": "npx tsx src/detect-agent/index.ts",
+    "start:router-agent": "npx tsx src/router-agent/index.ts",
+    "start:index": "npx tsx index.ts",
     "start:cli": "npx tsx cli.ts",
     "pretest": "npm run build",
     "test": "mocha build/test/**/*.js"
@@ -21,11 +23,15 @@
   "dependencies": {
     "dotenv": "^16.4.7",
     "genkit": "^1.14.0",
-    "genkitx-deepseek": "file:../../"
+    "genkitx-deepseek": "file:../../",
+    "sharp": "^0.33.0",
+    "onnxruntime-node": "^1.18.0",
+    "multer": "^1.4.5-lts.1"
   },
   "devDependencies": {
     "@types/chai": "^5.2.2",
     "@types/mocha": "^10.0.10",
+    "@types/multer": "^1.4.11",
     "@types/node": "^16.18.126",
     "@types/sinon": "^17.0.4",
     "chai": "^5.2.0",
