@@ -1,10 +1,10 @@
-import { deepseek, deepseekReasoner } from "genkitx-deepseek";
+import { deepseek, deepseekReasoner } from "../../../../src/index.js";
 import { genkit } from "genkit";
 import { dirname } from "path";
 import { fileURLToPath } from "url";
 
 /**
- * Genkit AI配置 - 使用Google AI模型
+ * Genkit AI配置 - 使用DeepSeek AI模型
  */
 export const ai = genkit({
   plugins: [deepseek({ apiKey: process.env.DEEPSEEK_API_KEY })],

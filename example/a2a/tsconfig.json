@@ -3,7 +3,6 @@
     "target": "es2022",
     "module": "NodeNext",
     "skipLibCheck": true,
-    "rootDir": ".",
     "outDir": "build",
     "sourceMap": true,
     "declaration": true,

@@ -101,10 +101,10 @@ function printAgentEvent(
     }
 
     console.log(
-      `${prefix} ${stateEmoji} Status: ${colorize(stateColor, state)} (Task: ${
+      `${prefix} ${stateEmoji} 状态: ${colorize(stateColor, state)} (任务: ${
         update.taskId
-      }, Context: ${update.contextId}) ${
-        update.final ? colorize("bright", "[FINAL]") : ""
+      }, 上下文: ${update.contextId}) ${
+        update.final ? colorize("bright", "[最终]") : ""
       }`
     );
 
@@ -116,11 +116,9 @@ function printAgentEvent(
   else if (event.kind === "artifact-update") {
     const update = event as TaskArtifactUpdateEvent; // 为类型安全进行转换
     console.log(
-      `${prefix} 📄 Artifact Received: ${
-        update.artifact.name || "(unnamed)"
-      } (ID: ${update.artifact.artifactId}, Task: ${update.taskId}, Context: ${
-        update.contextId
-      })`
+      `${prefix} 📄 收到工件: ${update.artifact.name || "(未命名)"} (ID: ${
+        update.artifact.artifactId
+      }, 任务: ${update.taskId}, 上下文: ${update.contextId})`
     );
     // 创建临时的类似消息的结构以重用printMessageContent
     printMessageContent({
@@ -135,7 +133,7 @@ function printAgentEvent(
     // 如果正确调用，这种情况理想情况下不应该达到
     console.log(
       prefix,
-      colorize("yellow", "Received unknown event type in printAgentEvent:"),
+      colorize("yellow", "在printAgentEvent中收到未知事件类型:"),
       event
     );
   }
@@ -144,30 +142,30 @@ function printAgentEvent(
 function printMessageContent(message: Message) {
   message.parts.forEach((part: Part, index: number) => {
     // 添加显式Part类型
-    const partPrefix = colorize("red", `  Part ${index + 1}:`);
+    const partPrefix = colorize("red", `第${index + 1}部分:`);
     if (part.kind === "text") {
       // 检查kind属性
-      console.log(`${partPrefix} ${colorize("green", "📝 Text:")}`, part.text);
+      console.log(`${partPrefix} ${colorize("green", "📝 文本:")}`, part.text);
     } else if (part.kind === "file") {
       // 检查kind属性
       const filePart = part as FilePart;
       console.log(
-        `${partPrefix} ${colorize("blue", "📄 File:")} Name: ${
-          filePart.file.name || "N/A"
-        }, Type: ${filePart.file.mimeType || "N/A"}, Source: ${
-          "bytes" in filePart.file ? "Inline (bytes)" : filePart.file.uri
+        `${partPrefix} ${colorize("blue", "📄 文件:")} 名称: ${
+          filePart.file.name || "无"
+        }, 类型: ${filePart.file.mimeType || "无"}, 来源: ${
+          "bytes" in filePart.file ? "内联 (字节)" : filePart.file.uri
         }`
       );
     } else if (part.kind === "data") {
       // 检查kind属性
       const dataPart = part as DataPart;
       console.log(
-        `${partPrefix} ${colorize("yellow", "📊 Data:")}`,
+        `${partPrefix} ${colorize("yellow", "📊 数据:")}`,
         JSON.stringify(dataPart.data, null, 2)
       );
     } else {
       console.log(
-        `${partPrefix} ${colorize("yellow", "Unsupported part kind:")}`,
+        `${partPrefix} ${colorize("yellow", "不支持的部分类型:")}`,
         part
       );
     }
@@ -178,59 +176,46 @@ function printMessageContent(message: Message) {
 async function fetchAndDisplayAgentCard() {
   // 使用客户端的getAgentCard方法。
   // 客户端使用serverUrl初始化，这是代理的基础URL。
-  console.log(
-    colorize(
-      "dim",
-      `Attempting to fetch agent card from agent at: ${serverUrl}`
-    )
-  );
+  console.log(colorize("dim", `\n正在尝试从代理获取代理卡片: ${serverUrl}`));
   try {
     // client.getAgentCard()使用客户端构造期间提供的agentBaseUrl
     const card: AgentCard = await client.getAgentCard();
     agentName = card.name || "Agent"; // 更新全局代理名称
-    console.log(colorize("green", `✓ Agent Card Found:`));
-    console.log(`  Name:        ${colorize("bright", agentName)}`);
+    console.log(colorize("green", `\n✓ 找到代理卡片:`));
+    console.log(`\t名称: ${colorize("bright", agentName)}`);
     if (card.description) {
-      console.log(`  Description: ${card.description}`);
+      console.log(`\t描述: ${card.description}`);
     }
-    console.log(`  Version:     ${card.version || "N/A"}`);
+    console.log(`\t版本: ${card.version || "无"}`);
     if (card.capabilities?.streaming) {
-      console.log(`  Streaming:   ${colorize("green", "Supported")}`);
+      console.log(`\t流式传输: ${colorize("green", "支持")}`);
     } else {
-      console.log(
-        `  Streaming:   ${colorize(
-          "yellow",
-          "Not Supported (or not specified)"
-        )}`
-      );
+      console.log(`\t流式传输: ${colorize("yellow", "不支持 (或未指定)")}`);
     }
     // 更新提示前缀以使用获取的名称
     // 提示在主循环中每次rl.prompt()调用之前动态设置
     // 以反映当前的agentName（如果在初始获取后更改的话，尽管不太可能）。
   } catch (error: any) {
-    console.log(colorize("yellow", `⚠️ Error fetching or parsing agent card`));
+    console.log(colorize("yellow", `\n⚠️ 获取或解析代理卡片时出错`));
     throw error;
   }
 }
 
 // --- 主循环 ---
 async function main() {
-  console.log(colorize("bright", `A2A Terminal Client`));
-  console.log(colorize("dim", `Agent Base URL: ${serverUrl}`));
+  console.log(colorize("bright", `\nA2A 终端客户端`));
+  console.log(colorize("dim", `代理基础URL: ${serverUrl}`));
 
   await fetchAndDisplayAgentCard(); // 在开始循环之前获取卡片
 
   console.log(
     colorize(
       "dim",
-      `No active task or context initially. Use '/new' to start a fresh session or send a message.`
+      `\n初始时没有活动任务或上下文。使用 '/new' 开始新会话或发送消息。`
     )
   );
   console.log(
-    colorize(
-      "green",
-      `Enter messages, or use '/new' to start a new session. '/exit' to quit.`
-    )
+    colorize("green", `\n输入消息，或使用 '/new' 开始新会话。'/exit' 退出。`)
   );
 
   rl.setPrompt(colorize("cyan", `${agentName} > You: `)); // 设置初始提示
@@ -249,10 +234,7 @@ async function main() {
       currentTaskId = undefined;
       currentContextId = undefined; // 在/new时重置contextId
       console.log(
-        colorize(
-          "bright",
-          `✨ Starting new session. Task and Context IDs are cleared.`
-        )
+        colorize("bright", `\n✨ 开始新会话。任务和上下文ID已清除。`)
       );
       rl.prompt();
       return;
@@ -297,7 +279,7 @@ async function main() {
     };
 
     try {
-      console.log(colorize("red", "Sending message..."));
+      console.log(colorize("red", "\n正在发送消息..."));
       // 使用sendMessageStream
       const stream = client.sendMessageStream(params);
 
@@ -325,25 +307,23 @@ async function main() {
             console.log(
               colorize(
                 "yellow",
-                `   Task ${typedEvent.taskId} is final. Clearing current task ID.`
+                `\n任务 ${typedEvent.taskId} 已结束。清除当前任务ID。`
               )
             );
             currentTaskId = undefined;
             // 可选地，如果任务结束意味着上下文结束，您可能还想清除currentContextId。
             // currentContextId = undefined;
-            // console.log(colorize("dim", `   Context ID also cleared as task is final.`));
+            // console.log(colorize("dim", `   由于任务结束，上下文ID也已清除。`));
           }
         } else if (event.kind === "message") {
           const msg = event as Message;
-          console.log(
-            `${prefix} ${colorize("green", "✉️ Message Stream Event:")}`
-          );
+          console.log(`${prefix} ${colorize("green", "✉️ 消息流事件:")}`);
           printMessageContent(msg);
           if (msg.taskId && msg.taskId !== currentTaskId) {
             console.log(
               colorize(
                 "dim",
-                `   Task ID context updated to ${msg.taskId} based on message event.`
+                `基于消息事件，任务ID上下文已更新为 ${msg.taskId}。`
               )
             );
             currentTaskId = msg.taskId;
@@ -352,7 +332,7 @@ async function main() {
             console.log(
               colorize(
                 "dim",
-                `   Context ID updated to ${msg.contextId} based on message event.`
+                `基于消息事件，上下文ID已更新为 ${msg.contextId}。`
               )
             );
             currentContextId = msg.contextId;
@@ -360,17 +340,15 @@ async function main() {
         } else if (event.kind === "task") {
           const task = event as Task;
           console.log(
-            `${prefix} ${colorize("blue", "ℹ️ Task Stream Event:")} ID: ${
+            `${prefix} ${colorize("blue", "ℹ️ 任务流事件:")} ID: ${
               task.id
-            }, Context: ${task.contextId}, Status: ${task.status.state}`
+            }, 上下文: ${task.contextId}, 状态: ${task.status.state}`
           );
           if (task.id !== currentTaskId) {
             console.log(
               colorize(
                 "dim",
-                `   Task ID updated from ${currentTaskId || "N/A"} to ${
-                  task.id
-                }`
+                `任务ID已从 ${currentTaskId || "无"} 更新为 ${task.id}`
               )
             );
             currentTaskId = task.id;
@@ -379,7 +357,7 @@ async function main() {
             console.log(
               colorize(
                 "dim",
-                `   Context ID updated from ${currentContextId || "N/A"} to ${
+                `上下文ID已从 ${currentContextId || "无"} 更新为 ${
                   task.contextId
                 }`
               )
@@ -387,43 +365,32 @@ async function main() {
             currentContextId = task.contextId;
           }
           if (task.status.message) {
-            console.log(colorize("gray", "   Task includes message:"));
+            console.log(colorize("gray", "任务包含消息:"));
             printMessageContent(task.status.message);
           }
           if (task.artifacts && task.artifacts.length > 0) {
             console.log(
-              colorize(
-                "gray",
-                `   Task includes ${task.artifacts.length} artifact(s).`
-              )
+              colorize("gray", `任务包含 ${task.artifacts.length} 个工件。`)
             );
           }
         } else {
           console.log(
             prefix,
-            colorize("yellow", "Received unknown event structure from stream:"),
+            colorize("yellow", "从流中收到未知事件结构:"),
             event
           );
         }
       }
-      console.log(
-        colorize("dim", `--- End of response stream for this input ---`)
-      );
+      console.log(colorize("dim", `\n--- 此输入的响应流结束 ---`));
     } catch (error: any) {
       const timestamp = new Date().toLocaleTimeString();
-      const prefix = colorize("red", `\n${agentName} [${timestamp}] ERROR:`);
-      console.error(
-        prefix,
-        `Error communicating with agent:`,
-        error.message || error
-      );
+      const prefix = colorize("red", `\n${agentName} [${timestamp}] 错误:`);
+      console.error(prefix, `与代理通信时出错:`, error.message || error);
       if (error.code) {
-        console.error(colorize("gray", `   Code: ${error.code}`));
+        console.error(colorize("gray", `代码: ${error.code}`));
       }
       if (error.data) {
-        console.error(
-          colorize("gray", `   Data: ${JSON.stringify(error.data)}`)
-        );
+        console.error(colorize("gray", `数据: ${JSON.stringify(error.data)}`));
       }
       if (!(error.code || error.data) && error.stack) {
         console.error(
@@ -434,13 +401,16 @@ async function main() {
       rl.prompt();
     }
   }).on("close", () => {
-    console.log(colorize("yellow", "\nExiting A2A Terminal Client. Goodbye!"));
+    console.log(colorize("yellow", "\n退出A2A终端客户端。再见!"));
     process.exit(0);
   });
 }
 
 // --- 启动 ---
 main().catch((err) => {
-  console.error(colorize("red", "Unhandled error in main:"), err);
+  console.error(colorize("red", "\n主函数中的未处理错误:"), err);
+  if (err.message.includes("fetch failed")) {
+    console.error(colorize("red", "请检查Node版本是否为18.0.0或更高。"));
+  }
   process.exit(1);
 });

@@ -5,10 +5,14 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
     "build": "tsc",
     "start:movie-agent": "npx tsx src/movie-agent/index.ts",
     "start:client": "npx tsx index.ts",
+    "start:cli": "npx tsx cli.ts",
     "pretest": "npm run build",
     "test": "mocha build/test/**/*.js"
   },
@@ -16,7 +20,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "dotenv": "^16.4.7",
-    "genkit": "^1.0.4",
+    "genkit": "^1.14.0",
     "genkitx-deepseek": "file:../../"
   },
   "devDependencies": {
