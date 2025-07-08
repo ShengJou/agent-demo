@@ -22,11 +22,41 @@
       "type": "node",
       "request": "launch",
       "program": "${workspaceFolder}/example/a2a/node_modules/tsx/dist/cli.mjs",
-      "args": ["${workspaceFolder}/example/a2a/movie-agent/index.ts"],
+      "args": ["${workspaceFolder}/example/a2a/src/movie-agent/index.ts"],
       "cwd": "${workspaceFolder}/example/a2a",
       "env": {
         "TMDB_API_KEY": "63149558d3413b3b6101514557889383",
         "DEEPSEEK_API_KEY": "sk-052b1bf3951d41819e4922b2d391ecb0"
+      },
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "skipFiles": ["<node_internals>/**"],
+      "outputCapture": "std"
+    },
+    {
+      "name": "Debug Router Agent",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/example/a2a/node_modules/tsx/dist/cli.mjs",
+      "args": ["${workspaceFolder}/example/a2a/src/router-agent/index.ts"],
+      "cwd": "${workspaceFolder}/example/a2a",
+      "env": {
+        "DEEPSEEK_API_KEY": "sk-052b1bf3951d41819e4922b2d391ecb0"
+      },
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "skipFiles": ["<node_internals>/**"],
+      "outputCapture": "std"
+    },
+    {
+      "name": "Debug Detect Agent",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/example/a2a/node_modules/tsx/dist/cli.mjs",
+      "args": ["${workspaceFolder}/example/a2a/src/detect-agent/index.ts"],
+      "cwd": "${workspaceFolder}/example/a2a",
+      "env": {
+        "TMDB_API_KEY": "63149558d3413b3b6101514557889383"
       },
       "console": "integratedTerminal",
       "internalConsoleOptions": "neverOpen",
