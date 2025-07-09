@@ -93,7 +93,7 @@ const yolo_classes = [
   "teddy bear",
   "hair drier",
   "toothbrush",
-];
+] as const;
 
 /**
  * 用于将输入图像转换为张量的函数，
@@ -181,9 +181,15 @@ function iou(box1, box2) {
  * @param output YOLOv8网络的原始输出
  * @param img_width 原始图像宽度
  * @param img_height 原始图像高度
+ * @param targetClasses 指定要检测的物体类型数组，如果为空则检测所有类型
  * @returns 检测对象数组，格式为 [[x1,y1,x2,y2,object_type,probability],..]
  */
-function process_output(output, img_width, img_height) {
+function process_output(
+  output,
+  img_width,
+  img_height,
+  targetClasses?: (typeof yolo_classes)[number][]
+) {
   let boxes = [];
   for (let index = 0; index < 8400; index++) {
     const [class_id, prob] = [...Array(80).keys()]
@@ -193,6 +199,16 @@ function process_output(output, img_width, img_height) {
       continue;
     }
     const label = yolo_classes[class_id];
+
+    // 如果指定了目标类型，则只保留指定类型的检测结果
+    if (
+      targetClasses &&
+      targetClasses.length > 0 &&
+      !targetClasses.includes(label)
+    ) {
+      continue;
+    }
+
     const xc = output[index];
     const yc = output[8400 + index];
     const w = output[2 * 8400 + index];
@@ -223,18 +239,23 @@ interface DrawOptions {
   lineWidth?: number;
   showLabels?: boolean;
   showConfidence?: boolean;
+  targetClasses?: (typeof yolo_classes)[number][]; // 指定要检测的物体类型，如 ["person", "car", "bicycle"]
 }
 
 /**
  * 接收图像，通过YOLOv8神经网络处理
  * 并返回检测到的对象及其边界框数组的函数
  * @param buf 输入图像数据
+ * @param targetClasses 指定要检测的物体类型数组，如果为空则检测所有类型
  * @returns 边界框数组，格式为 [[x1,y1,x2,y2,object_type,probability],..]
  */
-export async function detect_objects_on_image(buf) {
+export async function detect_objects_on_image(
+  buf,
+  targetClasses?: (typeof yolo_classes)[number][]
+) {
   const [input, img_width, img_height] = await prepare_input(buf);
   const output = await run_model(input);
-  const boxes = process_output(output, img_width, img_height);
+  const boxes = process_output(output, img_width, img_height, targetClasses);
   return boxes;
 }
 
@@ -445,7 +466,7 @@ export async function fetchImage(url: string): Promise<ArrayBuffer> {
 
 /**
  * 检测物体并绘制边界框
- * @param imageBuffer 输入图像数据
+ * @param imageUrl 输入图像URL
  * @param drawOptions 绘制选项
  * @returns 包含检测结果和绘制图像的对象
  */
@@ -457,8 +478,11 @@ export async function detect_and_draw(
     const imageArrayBuffer = await fetchImage(imageUrl);
     const imageBuffer = Buffer.from(imageArrayBuffer);
 
-    // 执行物体检测
-    const boxes = await detect_objects_on_image(imageBuffer);
+    // 执行物体检测，使用指定的目标类型
+    const boxes = await detect_objects_on_image(
+      imageBuffer,
+      drawOptions.targetClasses
+    );
 
     // 绘制边界框
     const drawnImage = await draw_image_and_boxes(

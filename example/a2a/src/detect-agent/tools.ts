@@ -30,6 +30,43 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 /**
+ * 保存base64图像数据到指定目录
+ * @param base64Data 图像的base64数据（不含data:image前缀）
+ * @param filePrefix 文件名前缀，默认为'image'
+ * @param outputDir 输出目录路径，默认为项目根目录下的assets/images
+ * @returns 保存的文件路径，如果保存失败则返回null
+ */
+function saveImageToAssets(
+  base64Data: string,
+  filePrefix: string = "image",
+  outputDir?: string
+): string | null {
+  try {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const filename = `${filePrefix}-${timestamp}.png`;
+
+    // 如果没有指定输出目录，使用默认的assets/images目录
+    const defaultOutputDir =
+      outputDir ||
+      path.join(path.resolve(__dirname, "../../"), "assets/images");
+    const outputPath = path.join(defaultOutputDir, filename);
+
+    // 确保目录存在
+    fs.mkdirSync(defaultOutputDir, { recursive: true });
+
+    // 从base64解码并保存图片
+    const buffer = Buffer.from(base64Data, "base64");
+    fs.writeFileSync(outputPath, buffer);
+
+    console.log(`图片已保存到: ${outputPath}`);
+    return outputPath;
+  } catch (saveError) {
+    console.error("保存图片失败:", saveError);
+    return null;
+  }
+}
+
+/**
  * 检测结果接口定义
  * 描述单个检测到的物体的信息
  */
@@ -124,6 +161,10 @@ export const detectObjects = ai.defineTool(
         .describe(
           "图像URL，支持HTTP/HTTPS URL、file://本地文件、data:base64数据、相对路径或绝对路径"
         ),
+      targetClasses: z
+        .array(z.enum(yolo_classes))
+        .optional()
+        .describe("指定要检测的物体类型，如果为空则检测所有类型"),
       includeDetails: z
         .boolean()
         .optional()
@@ -134,13 +175,23 @@ export const detectObjects = ai.defineTool(
         .describe("是否在图像上绘制边界框，默认为false"),
     }),
   },
-  async ({ imageUrl, includeDetails = true, drawBoundingBoxes = true }) => {
+  async ({
+    imageUrl,
+    targetClasses,
+    includeDetails = true,
+    drawBoundingBoxes = true,
+  }) => {
     console.log("\n正在调用[detect:detectObjects]，开始物体检测分析...\n");
     console.log(`图像URL: ${imageUrl}`);
+    if (targetClasses && targetClasses.length > 0) {
+      console.log(`指定检测类型: ${targetClasses.join(", ")}`);
+    } else {
+      console.log("检测所有类型");
+    }
 
     try {
       // 调用detect_and_draw方法获取检测结果
-      const result = await detect_and_draw(imageUrl);
+      const result = await detect_and_draw(imageUrl, { targetClasses });
       const { boxes, drawnImage, originalImage } = result;
 
       console.log(`检测完成！发现 ${boxes.length} 个物体`);
@@ -151,37 +202,22 @@ export const detectObjects = ai.defineTool(
       // 如果需要绘制边界框，返回带边界框的图像
       if (drawBoundingBoxes) {
         const drawnImageBase64 = drawnImage.toString("base64");
-        const drawnImageDataUrl = `data:image/png;base64,${drawnImageBase64}`;
+        // const drawnImageDataUrl = `data:image/png;base64,${drawnImageBase64}`;
 
         // 保存图片到assets/images目录
-        const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-        const filename = `detection-result-${timestamp}.png`;
-        const projectRoot = path.resolve(__dirname, "../../../");
-        const outputDir = path.join(projectRoot, "assets/images");
-        const outputPath = path.join(outputDir, filename);
+        const outputPath = saveImageToAssets(
+          drawnImageBase64,
+          "detection-result"
+        );
 
-        try {
-          // 确保目录存在
-          fs.mkdirSync(outputDir, { recursive: true });
-
-          // 从base64解码并保存图片
-          const imageData = drawnImageBase64;
-          const buffer = Buffer.from(imageData, "base64");
-          fs.writeFileSync(outputPath, buffer);
-
-          console.log(`图片已保存到: ${outputPath}`);
-        } catch (saveError) {
-          console.error("保存图片失败:", saveError);
-        }
-
-        formattedResult += `\n\n📸 已生成带边界框的图像：
+        if (outputPath) {
+          formattedResult += `\n\n📸 已生成带边界框的图像：
 - 图像格式: PNG
 - 图像尺寸: 已标注所有检测到的物体
 - 边界框颜色: 绿色 (#00ff00)
 - 包含置信度和类别标签
-- 保存路径: ${outputPath}
-
-图像数据: ${drawnImageDataUrl}`;
+- 保存路径: ${outputPath}`;
+        }
       }
 
       // 如果需要详细信息，添加技术细节
