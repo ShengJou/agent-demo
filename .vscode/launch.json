@@ -62,6 +62,23 @@
       "internalConsoleOptions": "neverOpen",
       "skipFiles": ["<node_internals>/**"],
       "outputCapture": "std"
+    },
+    {
+      "name": "Debug Lang Graph Agent",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/example/lang-graph/node_modules/tsx/dist/cli.mjs",
+      "args": [
+        "${workspaceFolder}/example/lang-graph/agent-executor/src/index.ts"
+      ],
+      "cwd": "${workspaceFolder}/example/lang-graph",
+      "env": {
+        "DEEPSEEK_API_KEY": "sk-052b1bf3951d41819e4922b2d391ecb0"
+      },
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "skipFiles": ["<node_internals>/**"],
+      "outputCapture": "std"
     }
   ]
 }
