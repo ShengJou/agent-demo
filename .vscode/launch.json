@@ -69,7 +69,7 @@
       "request": "launch",
       "program": "${workspaceFolder}/example/lang-graph/node_modules/tsx/dist/cli.mjs",
       "args": [
-        "${workspaceFolder}/example/lang-graph/agent-executor/src/index.ts"
+        "${workspaceFolder}/example/lang-graph/agents/src/agent_structured.ts"
       ],
       "cwd": "${workspaceFolder}/example/lang-graph",
       "env": {

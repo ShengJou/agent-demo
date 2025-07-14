@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 
 import readline from "node:readline";
-import { Calculator } from "@langchain/community/tools/calculator";
-import model from "../llm";
-import { getWeather } from "./tools";
-import { BaseMessage } from "@langchain/core/messages";
-import { match } from "ts-pattern";
+import { getWeather } from "../tools";
 import llm from "../llm";
-import { AgentExecutor, createOpenAIToolsAgent } from "langchain/agents";
+import {
+  AgentExecutor,
+  createOpenAIToolsAgent,
+  initializeAgentExecutorWithOptions,
+} from "langchain/agents";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
 import { pull } from "langchain/hub";
 
@@ -91,83 +91,100 @@ async function main() {
     }
 
     try {
+      /**
+       * 系统提示词
+       * @see https://smith.langchain.com/hub/hwchase17/openai-tools-agent
+       */
       const prompt = await pull<ChatPromptTemplate>(
         "hwchase17/openai-tools-agent"
       );
+
       const agent = await createOpenAIToolsAgent({
         llm,
         tools: [getWeather],
-        prompt: prompt,
+        prompt,
       });
-      const agentExecutor = new AgentExecutor({
+
+      const agentExecutor = await new AgentExecutor({
         agent,
         tools: [getWeather],
       });
-      const stream = await agentExecutor.stream({
-        input: input,
-      });
+
+      const stream = await agentExecutor.stream(
+        {
+          input,
+        },
+        {
+          callbacks: [
+            {
+              handleToolEnd: (output) => {
+                console.log(
+                  colorize(
+                    "green",
+                    `\n🔧 工具结果: ${JSON.stringify(output, null, 2)}`
+                  )
+                );
+              },
+              handleToolError: (error) => {
+                console.error(colorize("red", `🔧 工具错误: ${error}`));
+              },
+              handleToolStart: (input) => {
+                console.log(
+                  colorize(
+                    "cyan",
+                    `🔧 工具开始: ${JSON.stringify(input, null, 2)}`
+                  )
+                );
+              },
+              handleAgentAction: (action) => {
+                console.log(
+                  colorize(
+                    "blue",
+                    `🤖 代理动作: ${JSON.stringify(action, null, 2)}`
+                  )
+                );
+              },
+              handleAgentEnd: (output) => {
+                console.log(
+                  colorize(
+                    "green",
+                    `🤖 代理结束: ${JSON.stringify(output, null, 2)}`
+                  )
+                );
+              },
+              handleChainEnd: (output) => {
+                console.log(
+                  colorize(
+                    "green",
+                    `🔧 链结束: ${JSON.stringify(output, null, 2)}`
+                  )
+                );
+              },
+              handleChainError: (error) => {
+                console.error(colorize("red", `🔧 链错误: ${error}`));
+              },
+            },
+          ],
+        }
+      );
+
       for await (const chunk of stream) {
         // 工具调用结果
-        // chunk.intermediateSteps?.forEach((step) => {
-        //   console.log(step.observation);
-        // });
+        chunk.intermediateSteps?.forEach((step) => {
+          console.log(colorize("dim", `🔧 工具调用日志: ${step.action.log}`));
+          console.log(colorize("dim", `🔧 工具结果: ${step.observation}`));
+        });
 
         // 最终结果
         if (chunk.output) {
-          console.log(chunk.output);
+          console.log(
+            colorize(
+              "green",
+              `🤖 最终结果: ${JSON.stringify(chunk.output, null, 2)}`
+            )
+          );
         }
       }
-
-      // 发起非流式生成请求
-      // const res = await model.invoke([
-      //   {
-      //     role: "user",
-      //     content: input,
-      //   },
-      // ]);
-      // 发起流式生成请求
-      // const stream = await model
-      //   .bindTools([getWeather], {
-      //     tool_choice: "auto",
-      //   })
-      //   .stream(messages);
-      // for await (const chunk of stream) {
-      //   // 处理普通文本内容
-      //   if (chunk.text) {
-      //     process.stdout.write(chunk.text);
-      //   }
-      //   // 处理推理内容（如果有）
-      //   if (chunk.additional_kwargs?.reasoning_content) {
-      //     process.stdout.write(
-      //       colorize(
-      //         "dim",
-      //         chunk.additional_kwargs.reasoning_content as string
-      //       )
-      //     );
-      //   }
-      //   // 检查是否有工具调用
-      //   if (chunk.tool_calls && chunk.tool_calls.length > 0) {
-      //     for (const toolCall of chunk.tool_calls) {
-      //       // 执行工具调用
-      //       const toolResponse = match(toolCall.name).with(
-      //         "getWeather",
-      //         async () => {
-      //           return await getWeather.invoke(toolCall.args);
-      //         }
-      //       );
-      //       // 创建工具消息继续对话
-      //       messages = [
-      //         ...messages,
-      //         { role: "assistant", content: "", tool_calls: [toolCall] },
-      //         {
-      //           role: "tool" as const,
-      //           content: JSON.stringify(toolResponse),
-      //           tool_call_id: toolCall.id,
-      //         },
-      //       ];
-      //     }
-      //   }
-      // }
     } catch (error: any) {
       console.error(colorize("red", "错误:"), error.message);
     } finally {

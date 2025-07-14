@@ -3,7 +3,6 @@ import { z } from "zod";
 
 export const getWeather = tool(
   async ({ query }) => {
-    console.log("正在调用获取天气工具", query);
     if (query.toLowerCase().includes("旧金山")) {
       return "当前温度 15°C，有雾。";
     }
